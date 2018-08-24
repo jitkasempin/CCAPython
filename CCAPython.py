@@ -608,20 +608,20 @@ Query
 
 #Simple import 
 sqoop import \
---connect jdbc: mysql: // ms.itversity.com: 3306/retail_db \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_db \
 --username retail_user \
 --password itversity \
 --table order_items \
---warehouse-dir / user/srikapardhi/sqoop_import/retail_db \
+--warehouse-dir /user/srikapardhi/sqoop_import/retail_db \
 --boundary-query 'select min(order_item_id), max(order_item_id) from order_items where order_item_id > 99999'
 
 #Hardcode values : to get data whichin a range to avoid resource wastes. 
 sqoop import \
---connect jdbc: mysql: // ms.itversity.com: 3306/retail_db \
+--connect jdbc: mysql://ms.itversity.com: 3306/retail_db \
 --username retail_user \
 --password itversity \
 --table order_items \
---warehouse-dir / user/srikapardhi/sqoop_import/retail_db \
+--warehouse-dir /user/srikapardhi/sqoop_import/retail_db \
 --boundary-query 'select 100000, 172198' 
 
 #Boundary query should always give min and max values. 
@@ -635,14 +635,342 @@ a.Columns
 b.Query 
 
 #Notes:
+If you want to get subsets of columns (say from 10 columns, you just need 4) 
+you can use columns and if you have conditions you can use query. 
 Query and Table are mutually exclusive.
-Query cannot be used along with columns. 
+Query cannot be used along with columns, either you use table and or columns or use query. (query is more generic and flexible) 
 Table and or columns are mutually exclusive with query. 
-query should not be used with table or table and colums. 
-if you are using table, you should have colums also.  
+Query should not be used with table or table and colums. 
+If you are using table, you should have colums also.  
+if you are using colums, you should use table also. 
 
-Check for access token. 
+#a.Columns 
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+--username retail_user \
+--password itversity \
+--table order_items \
+--columns order_item_order_id,order_item_id,order_item_subtotal \
+--warehouse-dir /user/srikapardhi/sqoop_import/retail_db \
+--num-mappers 2
 
+#columns is closely related to table. 
+--columns should be with comma separated, and there shouldn't be space after column names. 
+#verification
+hadoop fs -tail /user/srikapardhi/sqoop_import/retail_db/order_items/part-m-00000
+#Subset of columns that you are interested on table.
+
+#b.Query : When you use query you should neither use table nor columns. 
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+--username retail_user \
+--password itversity \
+--target-dir /user/srikapardhi/sqoop_import/retail_db/orders_with_revenue \
+--num-mappers 2
+--query "select o.*, sum(oi.order_item_subtotal) order revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id and \$CONDITIONS group by o.order_id, o.order_date, o.order_customer_id, o.order_status" \
+--split-by order_id 
+
+#When using query, warehouse cannot be used, we need to use target-dir and split-by needs to given as the tool doesn't know how to divide the data between mappers if there are more than 2 mappers. 
+$CONDITIONS - is a placeholder for the convenience of sqoop developers. 
+
+#Verification 
+hadoop fs -tail /user/srikapardhi/sqoop_import/retail_db/orders_with_revenue/part-m-00000
+
+#Table and/or columns is mutually exclusive with query 
+#For query split by is mandatory if num mappers is greater than 1 - coz it doesn't know how to split 
+#query should have a placeholder for \$conditions
+
+@Sqoop Import Delimiters and Handling nulls 
+#Apache Sqoop - Sqoop Import - Delimiters and handling nulls
+Delimiters 
+Handling nulls
+#Different db called HR is used to demonstrate this example.
+
+>mysql -u hr_user -h ms.itversity.com -p 
+>itversity
+mysql> show databases;
+mysql> use hr_db;
+mysql> show tables; 
+mysql> exit 
+Bye 
+
+#Code 
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com:3306/hr_db \
+--username hr_user \
+--password itversity \
+--table employees \
+--warehouse-dir /user/srikapardhi/sqoop_import/hr_db
+
+commission_pct field in table has NULL values.
+
+Select commission_pct from employees; 
+in traditional db NULL represents nothing.
+The way NULL will be treated to RDBMS is properitory to it's db.
+But in HDFS the treatment should be different for NULL. 
+
+hadoop fs - get / user/srikapardhi/sqoop_import/hr_db
+
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com:3306/hr_db \
+--username hr_user \
+--password itversity \
+--table employees \
+--warehouse-dir /user/srikapardhi/sqoop_import/hr_db
+--null-non-string -1 \
+--fields-terminated-by "\t" \
+--lines-terminated-by  ":"
+
+#Output line formatting arguments 
+--optionally-enclosed-by 
+--fields-terminated-by
+--null-non-string
+
+#Numeric Data types : Null string is represented by -1 
+\000 - ASCII NULL 
+#Most likely they will give the delimiter information. 
+
+@Sqoop Import Incremental Import 
+#Apache Sqoop - Sqoop Import - Incremental loads
+Incremental import
+1. Using Query
+2. Using Where
+3. Alternative 
+
+Capture the delta and load the latest data into database. 
+Inserts are easy to cpature. 
+Updates/Delete - it is a bit complicated, we need to work with source team. 
+Delete is a bit more complicated. There is no easy way to capture the information for use in downstream app like HDFS. Additional flag for delete called soft delete. Set a flag to true if the record is deleted. 
+
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+--username retail_user \
+--password itversity \
+--target-dir /user/srikapardhi/sqoop_import/retail_db/orders \
+--num-mappers 2
+--query "select * from orders where \$CONDITIONS and order_date like '2013-%'" \
+--split-by order_id 
+
+
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+--username retail_user \
+--password itversity \
+--target-dir /user/srikapardhi/sqoop_import/retail_db/orders \
+--num-mappers 2
+--query "select * from orders where \$CONDITIONS and order_date like '2014-01%'" \
+--split-by order_id \
+--append #Append flag, data will be copied to the existing directory, otherwise it will fail. 
+
+#Drawback of query : We need to specify split-by. Identifying field is difficult if there are many tables. 
+#Sqoop User Guide 
+
+#Advantage of where clause is we can still use the table.  
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+--username retail_user \
+--password itversity \
+--target-dir /user/srikapardhi/sqoop_import/retail_db/orders \
+--num-mappers 2
+--table orders \
+--where "order_date like '2014-02%'" \
+--append 
+
+If we use where condition or query, we don't know upto what data we already copied or updated everytime. 
+We need to run eval before and after the import to check the data values.But these things are taken care if we use official incremental import arguments. 
+
+#Official Incremental Import using sqoop
+--check-colum 
+--incremental
+--last-value 
+
+The above will actually display the value 
+#Sqoop supports two types of incremental imports : append(typically with append mode we use numeric fields) and last modified (primary key fields on insert only tables)
+last modifed - where updates are done on source table, typically the column which will be passing as check is date field. 
+
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+--username retail_user \
+--password itversity \
+--target-dir /user/srikapardhi/sqoop_import/retail_db/orders \
+--num-mappers 2
+--table orders \
+--check-column order_date \
+--incremental append \
+--last-value '2014-02-28' 
+
+#Capture the importool information and save it somewhere, so that next time we can continue from the left over. 
+#'Sqoop job --create' will take over this job and take care of the last import details too. 
+
+@Sqoop Import to Hive tables
+#Apache Sqoop - Sqoop Import - Create database in hive
+1. Simple Hive Import
+2. Managing tables while performing Hive import 
+
+>hive 
+>create database srikapardhi_sqoop_import; 
+if database already exists it fails.
+>use srikapardhi_sqoop_import
+#Validate hive is working for you. Make sure you switch to database created.
+>create table t (i int);
+>insert into table t values (1);
+>select * from t;
+> drop table t;
+
+@Sqoop Simple Hive Import 
+#Apache Sqoop - Sqoop Import - Simple hive import
+#Sqoop User Guide > Importing Data into Hive. 
+
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+--username retail_user \
+--password itversity \
+--table order_items \
+--hive-import \
+--hive-database srikapardhi_sqoop_import \
+--hive-table order_items \
+--num-mappers 2 
+
+#--hive-import (Uses hive's default delimiters if none are set) 
+
+Mysql > Sqoop
+Sqoop > temporary DIR 
+Temporary DIR > Hive tables 
+Hive table is nothing but a HDFS directory. 
+
+>hive 
+>use srikapardhi_sqoop_import;
+>show tables;
+>describe formatted order_items; 
+#Will contain Location of the Hive table.
+
+>hadoop fs -ls 'path' 
+>hadoop fs -get 'path' srikapardhi_sqoop_import_order_items 
+>cd srikapardhi_sqoop_import_order_items
+>view part-m-00000
+#Default Delimiter in Hive for fields is ^A or ctrl A or ASCII 1 
+\u0001 - defailt field delimiter 
+
+@Sqoop Hive Import and Managing Tables 
+#Apache Sqoop - Sqoop Import - Hive import - Managing tables
+
+sqoop import \
+--connect jdbc: mysql://ms.itversity.com: 3306/retail_db \
+--username retail_user \
+--password itversity \
+--table order_items \
+--hive-import \
+--hive-database srikapardhi_sqoop_import \
+--hive-table order_items \
+--num-mappers 2
+
+>hive 
+>use srikapardhi_sqoop_import;
+>show tables;
+>describe formatted order_items;
+#In hive the table is nothing but a HDFS location. 
+> select count(1) from order_items;
+>exit;
+
+#Overwrite instead of appending by default. 
+sqoop import \
+--connect jdbc: mysql://ms.itversity.com: 3306/retail_db \
+--username retail_user \
+--password itversity \
+--table order_items \
+--hive-import \
+--hive-database srikapardhi_sqoop_import \
+--hive-table order_items \
+--hive-overwrite \
+--num-mappers 2
+
+#This will drop the table, recreate it. 
+
+#3rd Method : If the target table exists, then the command will fail using this syntax.
+--create-hive-table 
+This is highly confusing syntax. By default this property is false. 
+#Code 
+sqoop import \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+--username retail_user \
+--password itversity \
+--table order_items \
+--hive-import \
+--hive-database srikapardhi_sqoop_import \
+--hive-table order_items \
+--create-hive-table \
+--num-mappers 2
+
+# Use - hive overwrite or create hive table. Don't use both.  
+#Most Buggy Syntax on Sqoop import 
+
+the import will fail and data copied to Staging location before copying to target location. If sqoop import will fail, the data saved to staging loc will be left without clean up. 
+
+#Check - hadoop fs -ls /user/srikapardhi 
+#Error comes for staging location. 
+
+hadoop fs -rm -R /user/srikapardhi/order_items 
+
+1. --append
+2. --Overwrite
+3. --create-hive-table = fail if target already exists 
+
+#Even in projects we don't consider partition value directly. 
+
+--map-column-hive : typically data type on source will be different from hive. Typically the intelligence will map the data types but at times we might want to customize. SO, instead of using defaults, we can use custom data types for columns in hive while importing when required.
+
+@Sqoop Import All Tables
+#Apache Sqoop - Sqoop Import - Import all tables
+1.Import all tables
+2.Limitations
+a. --warehouse-dir is mandatory
+b. Better to use auto-reset-to-one-mapper 
+c. Cannot specify many arguments such as --query, --cols, --where, which does filtering on transformations on the data
+d.Incremental import not possible
+
+
+sqoop import-all-tables \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_db \
+--username retail_user \
+--password itversity \
+--warehouse-dir /user/srikapardhi/sqoop_import/retail_db \
+--autoreset-to-one-mapper
+#Avoid dir with table names. 
+
+@Typical Life Cycle of Sqoop Data processing 
+#Apache Sqoop - Typical life cycle
+1. Data Ingestion using sqoop - one of the approaches
+2. Process Data
+3. Visualize the processed data 
+a. Connect BI/Visualization tools to HDFS directly 
+b. Port the proessed data to a database 
+4. Sqoop export will help you in porting the process data to a database. 
+
+Import Orders and order_items tables using sqoop. 
+describe orders;
+describe order_items;
+#Relation : order_item_id = order_id 
+#Orders and order_items are transaction tables. 
+
+#HIVE Query
+create table daily_revenue as 
+select order_date, sum(order_item_subtotal) daily_revenue
+from orders join order_items on
+order_id = order_item_order_id
+where order_date like '2013-07%'
+group by order_date; 
+
+#Validation
+describe daily_revenue;
+select * from daily_revenue;
+
+
+@Sqoop Export with delimiters 
+#Apache Sqoop - Sqoop Export - Simple export with delimiters
+1. Simple export
+2. Delimiters
+3. Export behaviour
+4. Number of mappers 
 
 
 
