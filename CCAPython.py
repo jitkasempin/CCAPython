@@ -565,7 +565,7 @@ sqoop import \
 --table order_items \
 --warehouse-dir /user/srikapardhi/sqoop_import/retail_db \
 --num-mappers 2 \
---as-textfile \  #Optionsl because it is default 
+--as-textfile \  #Optional because it is default 
 --compress  
 
 #As files are compressed, we can't do cat or tail on the file. 
@@ -641,7 +641,7 @@ Table and or columns are mutually exclusive with query.
 query should not be used with table or table and colums. 
 if you are using table, you should have colums also.  
 
-
+Check for access token. 
 
 
 
