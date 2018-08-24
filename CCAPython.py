@@ -949,7 +949,7 @@ b. Port the proessed data to a database
 Import Orders and order_items tables using sqoop. 
 describe orders;
 describe order_items;
-#Relation : order_item_id = order_id 
+#Relation : order_item_order_id has a foreign key constraint with order_id. 
 #Orders and order_items are transaction tables. 
 
 #HIVE Query
@@ -972,6 +972,42 @@ select * from daily_revenue;
 3. Export behaviour
 4. Number of mappers 
 
+Export always expects a HDFS directory. 
+
+>mysql
+mysql> show datases;
+mysql> use retail_export; 
+mysql> create table daily_revenue(order_date varchar(30), revenue float); 
+exit;
+
+>hive
+>use srikapardhi_sqoop_import;
+>show tables;
+>describe daily_revenue;
+>describe formatted daily_revenue;
+
+sqoop export \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+--username retail_user \
+--password itversity \
+--export-dir /apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--table daily-revenue \
+--input-fields-terminated-by "\001"
+
+For field delimiter it is - ctrl A (ASCII 1) character.
+tab "\t"
+
+>mysql -u retail_user -h ms.itversity.com -p 
+mysql>select * from daily_revenue;
+
+#Note : --input-null-string , --input-null-non-string counterparts for imports null non string in export. 
+
+
+@Sqoop Export Behaviour and Number of Mappers 
+#Apache Sqoop - Sqoop Export - Export behaviour and number of mappers
+Cont...
+3. Export behaviour
+4. Number of mappers 
 
 
 
