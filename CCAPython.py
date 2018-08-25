@@ -955,7 +955,17 @@ describe order_items;
 #HIVE Query
 create table daily_revenue as 
 select order_date, sum(order_item_subtotal) daily_revenue
-from orders join order_items on
+import sys
+#Join tables
+#Join tables
+#Use orderid as key 
+from operator import add
+
+#Code 
+from pyspark import SparkConf, SparkContext
+from pyspark.streaming import StreamingContext
+from pyspark.streaming.kafka import KafkaUtils
+
 order_id = order_item_order_id
 where order_date like '2013-07%'
 group by order_date; 
@@ -1038,7 +1048,6 @@ depending on the number of records, the mappers will divide the insert commands 
 #HIVE Query
 create table daily_revenue as 
 select order_date, sum(order_item_subtotal) daily_revenue
-from orders join order_items on
 order_id = order_item_order_id
 where order_date like '2013-07%'
 group by order_date; 
@@ -1395,6 +1404,9 @@ for i in revenuePerOrder.take(10): print(i)
 
 
 
+
+
+
 #Inbuilt Functions
 #sc - Spark Context 
 #take(n) Return an array with the first n elements of the dataset. 
@@ -1482,8 +1494,6 @@ productsSoldOnlyInOneMonth = product201312only.union(product201401only)
 #Saving as text files with delimeters - revenue per order id
 orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
 orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
-#Use orderid as key 
-from operator import add
 revenuePerOrderId = orderItemsMap.reduceByKey(add)
 for i in revenuePerOrderId.take(10): print(i)
 
@@ -1527,7 +1537,6 @@ revenuePerOrderId.saveAsTextFile("/Users/srikapardhi/Documents/bigdata/BdProject
 orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
 orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
 
-from operator import add
 revenuePerOrderId = orderItemsMap.reduceByKey(add).map(lambda r: (r[0], round(r[1], 2)))
 #Now data is in the form of tupples. To save as file format , we need to convert RDD to DF.
 revenuePerOrderIdDF = revenuePerOrderId.toDF(schema=["order_id","order_revenue"]).show()
@@ -1610,8 +1619,6 @@ for i in ordersJoin.take(10): print(i)
 ordersJoinMap = ordersJoin.map(lambda o: ((o[1][0], o[1][1][0]), o[1][1][1]))
 for i in ordersJoinMap.take(10): print(i)
 
-#Join tables
-from operator import add
 dailyRevenuePerProductId = ordersJoinMap.reduceByKey(add)
 for i in dailyRevenuePerProductId.take(10): print(i)
 
@@ -1712,8 +1719,6 @@ for i in ordersJoin.take(10): print(i)
 ordersJoinMap = ordersJoin.map(lambda o: ((o[1][0], o[1][1][0]), o[1][1][1]))
 for i in ordersJoinMap.take(10): print(i)
 
-#Join tables
-from operator import add
 dailyRevenuePerProductId = ordersJoinMap.reduceByKey(add)
 for i in dailyRevenuePerProductId.take(10): print(i)
 
@@ -1781,7 +1786,6 @@ mkdir -p src/main/pthon
 cd src/main/python 
 vi DailyRevenuePerProduct.py 
 
-from pyspark import SparkConf, SparkContext
 
 conf = SparkConf().setAppName("Daily Revenue Per Product").setMaster("yarn-client")
 # We are running in yarn client mode. Config object is created.
@@ -2597,12 +2601,7 @@ kafka-console-consumer.sh --zookeeper hostname:port, hostname:port --topic fkdem
 Approach 2 : Direct Approach (No Receivers) - Everything is managed by kafka itself 
 Spark + kafka integration guide 
 
-#Code 
-from pyspark import SparkConf, SparkContext
-from pyspark.streaming import StreamingContext
-from pyspark.streaming.kafka import KafkaUtils
 
-import sys 
 
 conf = SparkConf().setAppName("Streaming Department Count").setMaster("yarn-master")
 sc = SparkContext(conf=conf)
@@ -2617,7 +2616,6 @@ messages = directkafkaStream.map(lambda msg: msg[1])
 departmentMessages = messages.filter(lambda msg: msg.split(" ")[6].split("/")[1] == "department")
 departmentNames = departmentMessages.map(lambda msg: (msg.split(" ")[6].split("/")[2], 1))
 
-from operator import add
 departmentCount = departmentNames.reduceByKey(add)
 
 outputPrefix = sys.argv[1]
