@@ -1009,6 +1009,380 @@ Cont...
 3. Export behaviour
 4. Number of mappers 
 
+#Code
+sqoop export \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+--username retail_user \
+--password itversity \
+--export-dir /apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--table daily_revenue \
+--input-fields-terminated-by "\001"
+
+#No of mappers are 4 by default. Sqoop will use the concept of blocks (HDFS concept - called block size) read the data and create insert statements. 
+
+INSERT into daily_revenue values (?, ?) #If there are 1 million records, 1 million insert statements will be created and divided among mappers to insert into data.
+If they say use 8 threads to export, use --num-mappers as 8. 
+If the dataset is very small, use number of mappers as 1. 
+
+Actually read the data using HDFS concept of blocks, 
+depending on the number of records, the mappers will divide the insert commands and execute the insert commands into the database.
+
+@Sqoop Column Mapping 
+#Apache Sqoop - Sqoop Export - Column mapping
+1. Column Mapping 
+2. Invoking Stored Procedures 
+3. Update and Upsert/Merge 
+4. Stage Tables
+
+#Recap Table Structure:
+#HIVE Query
+create table daily_revenue as 
+select order_date, sum(order_item_subtotal) daily_revenue
+from orders join order_items on
+order_id = order_item_order_id
+where order_date like '2013-07%'
+group by order_date; 
+
+#Code2
+mysql> create table daily_revenue_demo(revenue float, order_date varchar(30), description varcgar(200)); 
+Rather than code2 if the table structure is different. 
+
+sqoop export \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+--username retail_user \
+--password itversity \
+--export-dir / apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--table daily_revenue_demo \
+--columns order_date, revenue \
+--input-fields-terminated-by "\001"
+--num-mappers 1
+
+insert into daily_revenue_demo (order_date, revenue) values (?, ?)
+#Note
+Columns should match the source data structure.
+Structure should match the names in the source table. 
+columns name should match the column names in the target table. 
+
+>describe daily_revenue_demo;
+>select * from daily_revenue_demo;
+
+We can't do for all the scenarios.
+
+mysql>use retail_export;
+mysql>drop table daily_revenue_demo; 
+mysql> create table daily_revenue_demo(revenue float, order_date varchar(30), description varchar(200) not null); 
+
+Now, the above sqoop command will fail, as there is no matching value, default value (not null). 
+
+@Sqoop Export 
+#Apache Sqoop - Sqoop Export - Update and upsert/merge
+2. Invoking Stored Procedures
+3. Update and Upsert/Merge
+4. Stage Tables
+
+--table and --null are mutually exclusive. 
+Syntax for stored procedure will be different for different target datases. 
+Give the stored procedure name without arguments. 
+
+#Updating the data 
+
+create table daily_revenue (
+order_date varchar(30) primary key,
+revenue float
+); 
+
+If you try to export the data where primary key is available in target table, it will fail with PRIMAY KEY exception.
+Default behaviour is always insert. 
+To change the default behaviour from insert to update, we need to use --update-key. 
+
+--update-key : Define the column to do the lookup. 
+
+--update-mode : By default it will update only 1 record, if insert allowed then if there is new data it will insert the data into the records. 
+
+>hive 
+>use srikapardhi_sqoop_import;
+>show tables;
+
+update daily_revenue set revenue =0;
+select * from daily_revenue;
+
+#Code Update Key order date 
+sqoop export \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+--username retail_user \
+--password itversity \
+--export-dir / apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--table daily_revenue \
+--update-key order_date \
+--input-fields-terminated-by "\001"
+--num-mappers 1
+
+#Unfortunately map input/output records are misleading. 
+mysql> select * from daily_revenue;
+
+#Update table again to revenue o. 
+sqoop export \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+--username retail_user \
+--password itversity \
+--export-dir / apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--table daily_revenue \
+--update-key order_date \
+--update-mode allowinsert \
+--input-fields-terminated-by "\001"
+--num-mappers 1
+
+use retail_export;
+select * from daily_revenue;
+
+#Note: you can see the 38 records actually updated into the table or merged into the table. 
+
+@Sqoop Export Stage Tables
+#Apache Sqoop - Sqoop Export - StageTables
+4. Stage Tables 
+
+Stage tables is a concept where intermediate tables where data will be stored temporarily.
+Only when data is successfully loaded to intermediate tables, then data will be moved to target tables.
+
+insert into table daily_revenue
+select order_date, sum(order_item_subtotal) daily_revenue
+from orders join order_items on
+order_id = order_item_order_id 
+group by order_date; 
+
+#364 records once it is run. 
+
+truncate table daily_revenue;
+select * from daily_revenue;
+
+execute the hive query. 
+
+mysql
+use retail_export;
+select * from daily_revenue; 
+truncate table daily_revenue;
+insert into daily_revenue values("2014-07-01 00:00:00.0" 0);
+#On the above table order date is primary key.
+commit;
+
+sqoop export \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+--username retail_user \
+--password itversity \
+--export-dir / apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--table daily_revenue \
+--input-fields-terminated-by "\001"
+--num-mappers 1
+
+1 record in target table
+and approx 183 records in source which is hdfs. 
+#Export job failed.
+
+mysql
+use retail_export;
+select * from daily_export;
+
+sqoop export \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+--username retail_user \
+--password itversity \
+--export-dir / apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--table daily_revenue \
+--input-fields-terminated-by "\001"
+
+integrity constraint violation.
+
+mysql> use retail_export;
+select * from daily_revenue;
+1 row    - failure 
+275 rows - but we have. So, its in the middle. Inconsistent state. 
+364 rows - successfull
+
+To address this issue, we need to create a stage table. 
+
+create table daily_revenue_stage(
+    order_date varchar(30) primary key,
+    revenue float
+);
+
+#Most likely staging table will be same as target table,but sometimes we define the constraints and sometimes we don't. It depeds on the design.
+
+mysql>exit;
+
+#Sqoop code:
+sqoop export \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+--username retail_user \
+--password itversity \
+--export-dir /apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--table daily_revenue \
+--staging-table daily_revenue_stage \
+--input-fields-terminated-by "\001"
+
+use retail_export;
+truncate table daily_revenue;
+insert one record into table once again.
+commit;
+
+#Now execute the sqoop command. 
+
+Hive table: daily_revenue -> mysql table: daily_revenue_stage 
+insert into daily_revenue select * from daily_revenue_stage;
+
+hive: daily_revenue -- 364 records
+mysql: select * from daily_revenue_stage; -- 364 records 
+mysql: select * from daily_revenue; - only 1 record
+
+mysql> truncate table daily_revenue;
+mysql>exit;
+
+#Note: Every time you need to use staging table it should be empty else the job will fail.
+--clear-staging-table \
+
+delete from daily_revenue_stage;#It will add additional step of deleting from stage table. 
+hive table : daily_revenue or HDFS location -> mysql table: daily_revenue_stage 
+insert into daily_revenue select * from daily_revenue_stage;
+
+sqoop export \
+--connect jdbc:mysql://ms.itversity.com:3306/retail_export \
+--username retail_user \
+--password itversity \
+--export-dir /apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--table daily_revenue \
+--staging-table daily_revenue_stage \
+--clear-staging-table \
+--input-fields-terminated-by "\001"
+
+#Even without clear-staging-table, if export is successfull it will clear the staging table.
+
+@Apache Spark Core APIs for Transform Stage and Store 
+#Apache Spark Core APIs - Introduction
+1. Objectives
+2. Problem Statement 
+3. Introduction to Spark
+4. Initializing the job
+5. Create RDD using data from HDFS 
+6. Read data from different file formats
+7. Standard Transformations 
+8. Saving RDD back to HDFS 
+9. Save data in different file formats
+10. Solution 
+
+#Objectives 
+Convert a set of data valyes in a given format stored in HDFS into new data values or a new data format and write them into HDFS.
+1. Lord RDD data from HDFS for use in Spark applications.
+2. Write the results from an RDD back into HDFS using spark
+3. Read and write files in a variery file formats 
+4. Perform and standard extract, transform, load(ETL)process on data. 
+
+Reading from HDFS to RDD and 
+Writing from RDD back to HDFS.
+The existing data in HDFS can be in Avro, textFile or Json format and vice versa.  
+RDD is nothing but a collection which is built for spark.
+
+#DataBase Used: retail_db 
+Tables: 
+Departments
+categories
+products
+order_items : Transactions //child table 
+orders : Transactions // parent table
+customers : Customer Details 
+
+@Problem Statement 
+Use retail_db data set
+Problem Statement:
+1. Get daily revenue by product considering completed and closed orders.
+2. Data need to be sorted by ascending order by date and then decending order by revenue computed for each product for each day. 
+
+#Data for orders and order_items is available in HDFS 
+/public/retail_db/orders and /public/retail_db/order_items 
+
+#Data for products is available locally under 
+/data/retail_db/products 
+
+#Final output need to be stored under 
+1. HDFS location - avro format
+    /user/Your_user_id/daily_revenue_avro_python 
+2. HDFS location - text format
+/user/Your_user_id/daily_revenue_txt_python 
+3. Local Location /home/Your_user_id/daily_revenue_python 
+4. Solution need to be stored under 
+    /home/Your_user_id/daily_revenue_python.txt 
+
+@Spark Documentation 
+#03 Apache Spark Core APIs - Documentation
+1. Use 1.6 Documentation for now
+2. Get familiar with documentation as much as possible.
+URLS :
+http://spark.apache.org/docs/1.6.0/programming-guide.html
+http://spark.apache.org/docs/1.6.0/streaming-programming-guide.html
+http://spark.apache.org/docs/1.6.0/sql-programming-guide.html
+
+@Spark Core Connecting to Environment 
+#04 Apache Spark Core APIs - Connecting to Environment
+
+1. Initialize using pyspark
+a. Running in yarn mode (client or cluster mode)
+b. control arguments 
+c. deciding on number of executors
+d. setting up additional properties
+e. reading properties at run time
+
+2. Programmatic initizlization of job
+a. create configuration object
+b. create spark context object 
+
+@Spark Initialization 
+#05 Apache Spark Core APIs - Initializing the job using pyspark
+
+pyspark --master yarn 
+pyspark --master yarn --conf spark.ui.port=12888 
+#[In multi session environment you need to use port. default port 4040]
+Tracking URL can be helpful for job/logs verification purposs using web UI.
+exit()
+#Webservice will be killed after exit().
+
+@Spark Reading data from HDFS and create RDD
+#06 Apache Spark Core APIs - Create RDD from files using tex
+
+1. RDD is extension to python list
+2. RDD - Resilient Distributed Dataset
+a. in-memory
+b. Distributed
+c. Resilient 
+3. Reading files from HDFS
+4. Quick overview of Transformations and Actions
+5. DAG and lazy evaluation
+6. Previewing the data using Actions
+
+hadoop fs -ls /public/retail_db 
+#Contains 6 datasets 
+
+pyspark --master yarn --conf spark.ui.port=12888 
+help(sc) #sc is of type spark context 
+
+orderItems = sc.textFile("/public/retail_db/order_items")
+
+type(orderItems)
+help(orderItems)
+orderItems.first()
+for i in order.Items.take(10): print(i)
+
+orderItems[0] - you can't do something like this on RDD.
+
+#Transformations
+http://spark.apache.org/docs/1.6.0/programming-guide.html#transformations
+#Actions
+http://spark.apache.org/docs/1.6.0/programming-guide.html#actions
+
+Transformations will not execute the code logic immediately and only executed when an action is performed. 
+DAG - Directed Acyclic Graph 
+#Lazy Evaluation and Directed Acyclic Graph (DAG)
+orderItems = sc.textFile("/public/retail_db/order_items")
+orderItemsMap = orderItems.map(lambda oi: int(oi.split(",")[1], float(oi.split(",")[4])))
+revenuePerOrder = orderItemsMap.reduceByKey(lambda curr, next: curr + next)
+for i in revenuePerOrder.take(10): print(i)
 
 
 
@@ -1019,535 +1393,6 @@ Cont...
 
 
 
-
-
-
-
-
-
-#Spark Learning :
-The Spark engine – Spark core components and their implications 
-1.Driver program
-2.Spark shell 
-3.SparkContext 
-4.Worker nodes 
-5.Executors 
-6.Shared variables
-7.Flow of execution
-
-Explanation :
-1.Driver program
-2.Spark shell 
-3.SparkContext 
-4.Worker nodes 
-5.Executors : Each application has a set of executor processes. Executors reside on worker nodes and communicate directly with the driver once the connection is made by the cluster manager. 
-All executors are managed by SparkContext. 
-6.Shared variables : There are two kinds of shared variables, broadcast variables and accumulators.
-7.Flow of execution
-
-The RDD API – understanding the RDD fundamentals 
-1.RDD basics
-2.Persistence
-
-RDD operations – let's get your hands dirty 
-1.Getting started with the shell
-2.Creating RDDs
-3.Transformations on normal RDDs 
-4.Transformations on pair RDDs 
-5.Actions
-
-Abbreviations:
-Resilient Distributed Dataset (RDD)
-Directed Acyclic Graph (DAG)
-
-Two ways to create spark RDDs : 
-1. parallelize existing collection
-2. reference an external storage such as filesystem
-
-Two methods available on RDD :
-1. Transformations : Methods to create RDDs
-2. Actions : Methods that utilize RDD 
-
-RDDs are immutable, so any Transformations leads to new creation of RDD. 
-Transformations are applied lazily, only when an action is applied to them and not when an RDD is defined. 
-An RDD is recomputed everytime it is used in an action, unless the user explicitely persists the RDD in memory. 
-Lazy Transformations Advantage: Optimize the transformation steps. 
-
-Narrow Dependency : 
-Wide Dependency : 
-
-Persistence : 
-RDDs are computed everytime on the fly everytime they are acted upon the action method.
-A developer has options to save persist or cache a dataset in memory across locations.
-Developer may remove unwanted RDDs using unpersist.
-
-Nevertheless, LRU algorithms - least recently used , monitors the cache and removes old partitions. 
-
-cache() - Designed Only for persristance in the memory
-persist() = different levels of persistence , memory, only memory, disk and only disk.
-persist(MEMORY_ONLY)
-
-
-Two ways to create an RDD.
-1. Creating RDDs from the file system source. 
-fileRDD = sc.textFile('READMED')
-type(fileRDD)
-fileRDD.first()
-
-2. Parallelize an existing collection.
-numRDD = sc.parallelize([1,2,3,4],2) // This two defines the number of partitions the data should be divided explicitely. 
-Though this partitioning is done automatically. 1 2 , 3 4 
-type(numRDD)
-numRDD.first()
-
-numRDD.map(lambda x : x * x).collect()
-numRDD.map(lambda x : x * x).reduce(lambda a,b : a+b)
-
-lambda Function is an unnamed function typically used as function arguments to other functions. 
-
-Transformations on normal RDDs:
-1. filter operation
-2. distinct operation
-3. intersection operation
-4. union operation
-5. map operation
-6. flatmap operation
-7. keys operation
-8. cartesian operation
-
-1. filter operation : 
-The filter operation returns an RDD with only those elements that satisfy a filter condition, similar to the WHERE condition in SQL.
-a = sc.parallelize([1,2,3,4,5,6,7,8,9])
-b = a.filter(lambda x: x % 3 == 0)
-b.collect()
-
-
-2. distinct operation :
-The distinct ([numTasks]) operation returns an RDD with a new dataset after eliminating duplicates. 
-Returns distinct element in the RDD. 
-c = sc.parallelize(["John", "Jack", "Mike", "Jack"])
-c.distinct().collect()
-
-
-3. intersection operation : 
-The intersection operation takes another dataset as input. It returns a dataset that contains common elements:
-x = sc.parallelize([1,2,3,4,5,6,7,8,9,10])
-y = sc.parallelize([5,6,7,8,9,10,11,12,13,14,15])
-z = x.intersection(y)
-z.collect() 
-#Or can use take 
-or i in z.take(8): print(i)
-
-
-4. union operation : 
-The union operation takes another dataset as input. It returns a dataset that contains elements of itself and 
-the input dataset supplied to it. If there are common values in both sets, then they will appear as duplicate values 
-in the resulting set after union:
-a = sc.parallelize([3,4,5,6,7], 1)
-b = sc.parallelize([7,8,9], 1)
-c = a.union(b)
-c.collect()
-
-
-5. map operation
-The map operation returns a distributed dataset formed by executing an input function on each of the elements in the input dataset:
- map(func, *iterables) --> map object
- |
- |  Make an iterator that computes the function using arguments from
- |  each of the iterables.  Stops when the shortest iterable is exhausted.
-
-a = sc.parallelize(["animal", "human", "bird", "rat"], 3)
-b = a.map(lambda x: len(x))
-#[6, 5, 4, 3]
-c = a.zip(b) --help on class zip(object) builtin module 
-c.collect() 
-#[('animal', 6), ('human', 5), ('bird', 4), ('rat', 3)]
-
-
-6. flatmap operation
-The flatMap operation is similar to the map operation. While map returns one element per input element, 
-flatMap returns a list of zero or more elements for each input element:
-sc.parallelize([1,2,3,4,5], 4).flatMap(lambda x: range(1,x+1)).collect()
-[1, 1, 2, 1, 2, 3, 1, 2, 3, 4, 1, 2, 3, 4, 5]
-sc.parallelize([5, 10, 20], 2).flatMap(lambda x:[x, x, x]).collect()
-[5, 5, 5, 10, 10, 10, 20, 20, 20]
-
-
-7. keys operation
-The keys operation returns an RDD with the key of each tuple
-a = sc.parallelize(["black", "blue", "white", "green", "grey"], 2)
-b = a.map(lambda x:(len(x), x))
-[(5, 'black'), (4, 'blue'), (5, 'white'), (5, 'green'), (4, 'grey')]
-c = b.keys()
-c.collect()
-[5, 4, 5, 5, 4]
-
-
-8. cartesian operation
-The cartesian operation takes another dataset as argument and returns the Cartesian product of both datasets. 
-This can be an expensive operation, returning a dataset of size m x n where m and n are the sizes of input datasets:
-
-x = sc.parallelize([1,2,3])
-y = sc.parallelize([10,11,12])
-x.cartesian(y).collect()
-[(1, 10), (1, 11), (1, 12), (2, 10), (2, 11), (2, 12), (3, 10), (3, 11), (3, 12)]
-
-
-
-Transformations on pair RDD: 
-Some Spark operations are available only on RDDs of key value pairs. Note that most of these operations, 
-except counting operations, usually involve shuffling, because the data related to a key may not always reside on a single partition.
-1. groupbyKey operation
-2. join operation
-3. reduceByKey operation
-4. aggregate operation
-
-
-
-1. groupbyKey operation
-Similar to the SQL groupBy operation, this groups input data based on the key and you can use 
-aggregateKey or reduceByKey to perform aggregate operations:
-a = sc.parallelize(["black", "blue", "white", "green", "grey"], 2)
-b = a.groupBy(lambda x: len(x)).collect() 
-[(4, <pyspark.resultiterable.ResultIterable object at 0x10680bdd8>), (5, <pyspark.resultiterable.ResultIterable object at 0x10680be80>)]
-sorted([(x,sorted(y)) for (x,y) in b])
-[(4, ['blue', 'grey']), (5, ['black', 'green', 'white'])]
-
-2. join operation
-The join operation takes another dataset as input. Both datasets should be of the key value pairs type. 
-The resulting dataset is yet another key value dataset having keys and values from both datasets.
-a = sc.parallelize(["blue", "green", "orange"], 3)
-b = a.keyBy(lambda x: len(x))
-c = sc.parallelize(["black", "white", "grey"], 3)
-d = c.keyBy(lambda x: len(x))
-
-
-b.join(d).collect()
-[(4, ('blue', 'grey')), (5, ('green', 'black')), (5, ('green', 'white'))]
-
-//leftOuterJoin
-b.leftOuterJoin(d).collect()
-[(6, ('orange', None)), (4, ('blue', 'grey')), (5, ('green', 'black')), (5,('green', 'white'))]
-
-//rightOuterJoin
-b.rightOuterJoin(d).collect()
-[(4, ('blue', 'grey')), (5, ('green', 'black')), (5, ('green', 'white'))]
-
-//fullOuterJoin
-b.fullOuterJoin(d).collect()
-[(6, ('orange', None)), (4, ('blue', 'grey')), (5, ('green', 'black')), (5,('green', 'white'))]
-
-
-
-3. reduceByKey operation
-The reduceByKey operation merges the values for each key using an associative reduce function. 
-This will also perform the merging locally on each mapper before sending results to a reducer and producing hash-partitioned output.
-a = sc.parallelize(["black", "blue", "white", "green", "grey"], 2)
-b = a.map(lambda x: (len(x), x))
-b.collect()
-[(5, 'black'), (4, 'blue'), (5, 'white'), (5, 'green'), (4, 'grey')]
-b.reduceByKey(lambda x,y: x + y).collect()
-[(4, 'bluegrey'), (5, 'blackwhitegreen')]
-
-#Will add the values/Strings of same KeyValues. Example : All 4, 5
-
-
-4. aggregate operation #Check this operation 
-The aggregrate operation returns an RDD with the keys of each tuple.
-
-z = sc.parallelize([1,2,7,4,30,6], 2)
-z.aggregate(0,(lambda x, y: max(x, y)),(lambda x, y: x + y))
-37
-
-z = sc.parallelize(["a","b","c","d"],2)
-z.aggregate("",(lambda x, y: x + y),(lambda x, y: x + y))
-'abcd'
-
-z.aggregate("s",(lambda x, y: x + y),(lambda x, y: x + y))
-'ssabsscds'
-
-z = sc.parallelize(["12","234","345","56789"], 2)
-z.aggregate("",(lambda x, y: str(max(len(str(x)), len(str(y))))),(lambda x,y: str(y) + str(x)))
-'53'
-
-z.aggregate("",(lambda x, y: str(min(len(str(x)), len(str(y))))),(lambda x,y: str(y) + str(x)))
-'11'
-
-z = sc.parallelize(["12","234","345",""],2)
-z.aggregate("",(lambda x, y: str(min(len(str(x)), len(str(y))))),(lambda x,y: str(y) + str(x)))
-'01'
-
-
-Actions: Once an RDD is created various transformations get executed only when an action is performed on it. 
-The result of an action can either be data written back to the storage system or returned to the driver program 
-that initiated this for further computation locally to produce the final result.
-1. collect()
-2. count()
-3. take(n)
-4. first()
-5. takeSample()
-6. countByKey()
-
-
-Calling collect () on an RDD will return the entire dataset to the driver which can cause out of memory and we should avoid that.
-Collect (Action) - Return all the elements of the dataset as an array at the driver program. 
-This is usually useful after a filter or other operation that returns a sufficiently small subset of the data.
-
-
-1. collect()
-The collect() function returns all the results of an RDD operation as an array to the driver program. 
-This is usually useful for operations that produce sufficiently small datasets. 
-Ideally, the result should easily fit in the memory of the system that's hosting the driver program.
-
-2. count()
-This returns the number of elements in a dataset or the resulting output of an RDD operation.
-
-3. take(n)
-The take(n) function returns the first (n) elements of a dataset or the resulting output of an RDD operation.
-
-4. first()
-The first() function returns the first element of the dataset or the resulting output of an RDD operation. 
-It works similarly to the take(1) function.
-
-5. takeSample()
-The takeSample(withReplacement, num, [seed]) function returns an array with a random sample of elements from a dataset. 
-It has three arguments as follows:
-
-1. withReplacement/withoutReplacement: This indicates sampling with or without replacement (while taking multiple samples, 
-it indicates whether to replace the old sample back to the set and then take a fresh sample or sample without replacing). 
-For withReplacement, argument should be True and False otherwise.
-2. num: This indicates the number of elements in the sample. 
-3. Seed: This is a random number generator seed (optional).
-
-6. countByKey()
-The countByKey() function is available only on RDDs of type key value. It returns a table of (K, Int) pairs with the count of each key.
-
-
-#DataFrames - Introduction
-Interactive data analysis gets easier with datasets that can be represented as named columns, 
-which was not the case with plain RDDs. So, the need for a schema-based approach to represent data 
-in a standardized way was the inspiration behind DataFrames.
-
-
-1.Why DataFrames?
-2.Spark SQL
->Catalyst optimizer
-3.DataFrame API
->DataFrame basics
->RDD versus DataFrame
-4.Creating DataFrames 
->From RDDs
->From JSON
->From JDBC sources 
->From other data sources
-5.Manipulating DataFrames
-
-
-1.Why DataFrames?
-Though Spark provided a functional programming API to manipulate distributed collections of data, it ended up with tuples (_1, _2, ...)
-Coding to operate on tuples was a little complicated and messy, and was slow at times. 
-So, a standardized layer was needed, with the following characteristics:
-1.Named columns with a schema
-2.Functionality to consolidate data from various data sources such as 
-Hive, Parquet, SQL Server, PostgreSQL, JSON, and also Spark's native RDDs, and unify them to a common format
-3.Ability to take advantage of built-in schemas in special file formats such as Avro, CSV, JSON, and so on.
-
-
-2.Spark SQL
-Spark SQL can also be used to read data from an existing Hive installation. 
-Apart from these plain SQL operations, Spark SQL also addresses some tough problems. 
-Designing complex logic through relational queries was cumbersome and almost impossible at times. 
-So, Spark SQL was designed to integrate the capabilities of relational processing and 
-functional programming so that complex logics can be implemented, optimized, and scaled on a distributed computing setup.
-
-There are basically three ways to interact with Spark SQL, including SQL, the DataFrame API, and the Dataset API.
-
-Through the declarative syntax, users can focus on what the program should accomplish and 
-not bother about the control flow, which will be taken care of by the Catalyst optimizer, built inside Spark SQL.
-
->Catalyst optimizer
-1.Spark has built-in support for JSON schema inference. 
-Users can just create a table out of any JSON file by registering it as a table and simply query it with SQL syntaxes.
-2.built-in support for CSV, XML, and other formats
-
-
-
-3.DataFrame API
-A two-dimensional data structure that usually has labelled rows and columns is called a DataFrame in some realms, 
-such as R DataFrames and Python's Pandas DataFrames.
->DataFrame basics
-Unlike RDDs, however, they keep track of schemas and facilitate relational operations as well as procedural operations such as map.
->RDD versus DataFrame
-
-Similarities:
-Both can handle disparate data sources
-Both are lazily evaluated (execution happens when an output operation is performed on them), thereby having the ability to take the most optimized execution plan
-
-Differences between DataFrames:
-DataFrames are a higher-level abstraction than RDDs.
-The definition of RDD implies defining a Directed Acyclic Graph (DAG) whereas defining a DataFrame leads to the creation of an Abstract Syntax Tree (AST). An AST will be utilized and optimized by the Spark SQL catalyst engine.
-RDD is a general data structure abstraction whereas a DataFrame is a specialized data structure to deal with two-dimensional, 
-table-like data.
-
-
-4.Creating DataFrames 
-Spark DataFrame creation is similar to RDD creation. To get access to the DataFrame API, you need SQLContext or HiveContext as an entry point.
-
->From RDDs
-The following code creates an RDD from a list of colors followed by a collection of tuples containing the color name and its length. 
-It creates a DataFrame using the toDF method to convert the RDD into a DataFrame. 
-The toDF method takes a list of column labels as an optional argument:
-
-#Create a list of colours
-colors = ['white','green','yellow','red','brown','pink']
-#Distribute a local collection to form an RDD
-#Apply map function on that RDD to get another RDD containing colour, length tuples
-color_df = sc.parallelize(colors).map(lambda x:(x,len(x))).toDF(["color","length"])
-#DataFrame[color: string, length: bigint]
-color_df.dtypes  #Note the implicit type inference
-#[('color', 'string'), ('length', 'bigint')]
-color_df.show()  #Final output as expected. Order need not be the same as shown
-
-color_df = sc.parallelize(colors).map(lambda x:(x,len(x))).toDF(["hello","length"])
-
-We created an RDD here and then transformed that to tuples which are then sent to the toDF method. 
-Note that toDF takes a list of tuples instead of scalar elements. 
-You need to pass tuples even to create single-column DataFrames. 
-Each tuple is akin to a row. You can optionally label the columns; 
-otherwise, Spark creates obscure names such as _1, _2. Type inference of the columns happens implicitly.
-
->From JSON
-#The Spark DataFrame API lets developers convert JSON objects into DataFrames and vice versa.
-#Pass the source json data file path
-df = sqlContext.read.json("./authors.json")
-df.show() #json parsed; Column names and data types inferred implicitly
-#Spark infers schemas automatically from the keys and creates a DataFrame accordingly.
-
-
->From JDBC sources 
-#Launch shell with driver-class-path as a command line argument
-pyspark --driver-class-path /usr/share/   java/mysql-connector-java.jar
-#Pass the connection parameters
-peopleDF = sqlContext.read.format('jdbc').options(
-                           url = 'jdbc:mysql://localhost',
-                           dbtable = 'test.people',
-                           user = 'root',
-                           password = 'mysql').load()
-#Retrieve table data as a DataFrame
-peopleDF.show()
-
->From other data sources
-#Creating DataFrames from Apache Parquet
-Apache Parquet is an efficient, compressed columnar data representation available to any project in the Hadoop ecosystem. 
-Columnar data representations store data by column, as opposed to the traditional approach of storing data row by row. 
-Use cases that require frequent querying of two to three columns from several columns benefit greatly from 
-such an arrangement because columns are stored contiguously on the disk and you do not have to read unwanted columns in row-oriented storage. 
-Another advantage is in compression. Data in a single column belongs to a single type. The values tend to be similar, and sometimes identical. 
-These qualities greatly enhance compression and encoding efficiency. 
-Parquet allows compression schemes to be specified on a per-column level and allows adding more encodings as they are invented and implemented.
-
-
-#The following example writes the people data peopleDF loaded into a DataFrame in the previous example into Parquet format and 
-#then re-reads it into an RDD:
-#Write DataFrame contents into Parquet format
-peopleDF.write.parquet('writers.parquet')
-#Read Parquet data into another DataFrame
-writersDF = sqlContext.read.parquet('writers.parquet')
-#writersDF: org.apache.spark.sql.DataFrame = [first_name: last_name: string, gender: string, dob:    date, occupation: string, person_id: int]
-
-
-DataFrame Operations:
-Developers chain multiple operations to filter, transform, aggregate, and sort data in the DataFrames. 
-The underlying Catalyst optimizer ensures efficient execution of these operations. 
-These functions you find here are similar to those you commonly find in SQL operations on tables:
-
-
-#Create a local collection of colors first
-colors = ['white','green','yellow','red','brown','pink']
-#Distribute the local collection to form an RDD
-#Apply map function on that RDD to get another RDD containing colour, length tuples and convert that RDD to a DataFrame
-color_df = sc.parallelize(colors).map(lambda x:(x,len(x))).toDF(['color','length'])
-#Check the object type
-color_df
-#DataFrame[color: string, length: bigint]
-#Check the schema
-color_df.dtypes
-#[('color', 'string'), ('length', 'bigint')]
-#Check row count
-
-
- //List out column names
-color_df.columns
-#[u'color', u'length']
-#Drop a column. The source DataFrame color_df remains the same. //Spark returns a new DataFrame which is being passed to show
-color_df.drop('length').show()
-
-
-//Convert to JSON format
-color_df.toJSON().first()
-'{"color":"white","length":5}'
-#filter operation is similar to WHERE clause in SQL
-#//You specify conditions to select only desired columns and rows
-#//Output of filter operation is another DataFrame object that is usually passed on to some more operations
-#//The following example selects the colors having a length of four or five only and label the column as "mid_length"
-filter
-------
-color_df.filter(color_df.length.between(4,5)).select(color_df.color.alias("mid_length")).show()
-
-
-//This example uses multiple filter criteria
-color_df.filter(color_df.length > 4).filter(color_df[0]!="white").show()
-
-
-//Sort the data on one or more columns
-sort
-----
-#A simple single column sorting in default (ascending) order
-color_df.sort("color").show()
-#//First filter colors of length more than 4 and then sort on multiple columns
-#/The Filtered rows are sorted first on the column length in default ascending order. 
-# Rows with same length are sorted on color in descending order
-color_df.filter(color_df['length']>=4).sort("length",'color',ascending=False).show()
-
-
-//You can use orderBy instead, which is an alias to sort
-color_df.orderBy('length','color').take(4)
-#[Row(color=u'red', length=3), Row(color=u'pink', length=4),
-#Row(color=u'brown', length=5), Row(color=u'green', length=5)]
-#//Alternative syntax, for single or multiple columns.
-color_df.sort(color_df.length.desc(),color_df.color.asc()).show()
-
-//All the examples until now have been acting on one row at a time, filtering or transforming or reordering.
-#The following example deals with regrouping the data
-#These operations require "wide dependency" and often involve shuffling.
-groupBy
--------
-color_df.groupBy('length').count().show()
-
-//Data often contains missing information or null values. We may want to drop such rows or replace with some filler information. 
-#dropna is provided for dropping such rows
-#The following json file has names of famous authors. Firstname data is missing in one row.
-#dropna
-------
-df1 = sqlContext.read.json('./authors_missing.json')
-df1.show()
-
-
-//Let us drop the row with incomplete information
-df2 = df1.dropna()
-df2.show()  #Unwanted row is dropped
-
-
-You already know by now that the DataFrame API is empowered by Spark SQL and that the Spark SQL's Catalyst optimizer plays a crucial role 
-in optimizing the performance. Though the query is executed lazily, it uses the catalog component of Catalyst to identify whether 
-the column names used in the program or expressions exist in the table being used and the data types are proper, 
-and also takes many other such precautionary actions. The advantage to this approach is that, instead of waiting till program execution, 
-an error pops up as soon as the user types an invalid expression.
-
-
-
-
-Page 86
 
 
 #Inbuilt Functions
@@ -2974,3 +2819,529 @@ Streaming Data Source Overview
 Apache Flume and Apache Kafka Data Sources
 Example: Using a Kafka Direct Data Source
 --
+
+#External Resources/Books Reference: 
+
+#Spark Learning :
+The Spark engine – Spark core components and their implications 
+1.Driver program
+2.Spark shell 
+3.SparkContext 
+4.Worker nodes 
+5.Executors 
+6.Shared variables
+7.Flow of execution
+
+Explanation :
+1.Driver program
+2.Spark shell 
+3.SparkContext 
+4.Worker nodes 
+5.Executors : Each application has a set of executor processes. Executors reside on worker nodes and communicate directly with the driver once the connection is made by the cluster manager. 
+All executors are managed by SparkContext. 
+6.Shared variables : There are two kinds of shared variables, broadcast variables and accumulators.
+7.Flow of execution
+
+The RDD API – understanding the RDD fundamentals 
+1.RDD basics
+2.Persistence
+
+RDD operations – let's get your hands dirty 
+1.Getting started with the shell
+2.Creating RDDs
+3.Transformations on normal RDDs 
+4.Transformations on pair RDDs 
+5.Actions
+
+Abbreviations:
+Resilient Distributed Dataset (RDD)
+Directed Acyclic Graph (DAG)
+
+Two ways to create spark RDDs : 
+1. parallelize existing collection
+2. reference an external storage such as filesystem
+
+Two methods available on RDD :
+1. Transformations : Methods to create RDDs
+2. Actions : Methods that utilize RDD 
+
+RDDs are immutable, so any Transformations leads to new creation of RDD. 
+Transformations are applied lazily, only when an action is applied to them and not when an RDD is defined. 
+An RDD is recomputed everytime it is used in an action, unless the user explicitely persists the RDD in memory. 
+Lazy Transformations Advantage: Optimize the transformation steps. 
+
+Narrow Dependency : 
+Wide Dependency : 
+
+Persistence : 
+RDDs are computed everytime on the fly everytime they are acted upon the action method.
+A developer has options to save persist or cache a dataset in memory across locations.
+Developer may remove unwanted RDDs using unpersist.
+
+Nevertheless, LRU algorithms - least recently used , monitors the cache and removes old partitions. 
+
+cache() - Designed Only for persristance in the memory
+persist() = different levels of persistence , memory, only memory, disk and only disk.
+persist(MEMORY_ONLY)
+
+
+Two ways to create an RDD.
+1. Creating RDDs from the file system source. 
+fileRDD = sc.textFile('READMED')
+type(fileRDD)
+fileRDD.first()
+
+2. Parallelize an existing collection.
+numRDD = sc.parallelize([1,2,3,4],2) // This two defines the number of partitions the data should be divided explicitely. 
+Though this partitioning is done automatically. 1 2 , 3 4 
+type(numRDD)
+numRDD.first()
+
+numRDD.map(lambda x : x * x).collect()
+numRDD.map(lambda x : x * x).reduce(lambda a,b : a+b)
+
+lambda Function is an unnamed function typically used as function arguments to other functions. 
+
+Transformations on normal RDDs:
+1. filter operation
+2. distinct operation
+3. intersection operation
+4. union operation
+5. map operation
+6. flatmap operation
+7. keys operation
+8. cartesian operation
+
+1. filter operation : 
+The filter operation returns an RDD with only those elements that satisfy a filter condition, similar to the WHERE condition in SQL.
+a = sc.parallelize([1,2,3,4,5,6,7,8,9])
+b = a.filter(lambda x: x % 3 == 0)
+b.collect()
+
+
+2. distinct operation :
+The distinct ([numTasks]) operation returns an RDD with a new dataset after eliminating duplicates. 
+Returns distinct element in the RDD. 
+c = sc.parallelize(["John", "Jack", "Mike", "Jack"])
+c.distinct().collect()
+
+
+3. intersection operation : 
+The intersection operation takes another dataset as input. It returns a dataset that contains common elements:
+x = sc.parallelize([1,2,3,4,5,6,7,8,9,10])
+y = sc.parallelize([5,6,7,8,9,10,11,12,13,14,15])
+z = x.intersection(y)
+z.collect() 
+#Or can use take 
+or i in z.take(8): print(i)
+
+
+4. union operation : 
+The union operation takes another dataset as input. It returns a dataset that contains elements of itself and 
+the input dataset supplied to it. If there are common values in both sets, then they will appear as duplicate values 
+in the resulting set after union:
+a = sc.parallelize([3,4,5,6,7], 1)
+b = sc.parallelize([7,8,9], 1)
+c = a.union(b)
+c.collect()
+
+
+5. map operation
+The map operation returns a distributed dataset formed by executing an input function on each of the elements in the input dataset:
+ map(func, *iterables) --> map object
+ |
+ |  Make an iterator that computes the function using arguments from
+ |  each of the iterables.  Stops when the shortest iterable is exhausted.
+
+a = sc.parallelize(["animal", "human", "bird", "rat"], 3)
+b = a.map(lambda x: len(x))
+#[6, 5, 4, 3]
+c = a.zip(b) --help on class zip(object) builtin module 
+c.collect() 
+#[('animal', 6), ('human', 5), ('bird', 4), ('rat', 3)]
+
+
+6. flatmap operation
+The flatMap operation is similar to the map operation. While map returns one element per input element, 
+flatMap returns a list of zero or more elements for each input element:
+sc.parallelize([1,2,3,4,5], 4).flatMap(lambda x: range(1,x+1)).collect()
+[1, 1, 2, 1, 2, 3, 1, 2, 3, 4, 1, 2, 3, 4, 5]
+sc.parallelize([5, 10, 20], 2).flatMap(lambda x:[x, x, x]).collect()
+[5, 5, 5, 10, 10, 10, 20, 20, 20]
+
+
+7. keys operation
+The keys operation returns an RDD with the key of each tuple
+a = sc.parallelize(["black", "blue", "white", "green", "grey"], 2)
+b = a.map(lambda x:(len(x), x))
+[(5, 'black'), (4, 'blue'), (5, 'white'), (5, 'green'), (4, 'grey')]
+c = b.keys()
+c.collect()
+[5, 4, 5, 5, 4]
+
+
+8. cartesian operation
+The cartesian operation takes another dataset as argument and returns the Cartesian product of both datasets. 
+This can be an expensive operation, returning a dataset of size m x n where m and n are the sizes of input datasets:
+
+x = sc.parallelize([1,2,3])
+y = sc.parallelize([10,11,12])
+x.cartesian(y).collect()
+[(1, 10), (1, 11), (1, 12), (2, 10), (2, 11), (2, 12), (3, 10), (3, 11), (3, 12)]
+
+
+
+Transformations on pair RDD: 
+Some Spark operations are available only on RDDs of key value pairs. Note that most of these operations, 
+except counting operations, usually involve shuffling, because the data related to a key may not always reside on a single partition.
+1. groupbyKey operation
+2. join operation
+3. reduceByKey operation
+4. aggregate operation
+
+
+
+1. groupbyKey operation
+Similar to the SQL groupBy operation, this groups input data based on the key and you can use 
+aggregateKey or reduceByKey to perform aggregate operations:
+a = sc.parallelize(["black", "blue", "white", "green", "grey"], 2)
+b = a.groupBy(lambda x: len(x)).collect() 
+[(4, <pyspark.resultiterable.ResultIterable object at 0x10680bdd8>), (5, <pyspark.resultiterable.ResultIterable object at 0x10680be80>)]
+sorted([(x,sorted(y)) for (x,y) in b])
+[(4, ['blue', 'grey']), (5, ['black', 'green', 'white'])]
+
+2. join operation
+The join operation takes another dataset as input. Both datasets should be of the key value pairs type. 
+The resulting dataset is yet another key value dataset having keys and values from both datasets.
+a = sc.parallelize(["blue", "green", "orange"], 3)
+b = a.keyBy(lambda x: len(x))
+c = sc.parallelize(["black", "white", "grey"], 3)
+d = c.keyBy(lambda x: len(x))
+
+
+b.join(d).collect()
+[(4, ('blue', 'grey')), (5, ('green', 'black')), (5, ('green', 'white'))]
+
+//leftOuterJoin
+b.leftOuterJoin(d).collect()
+[(6, ('orange', None)), (4, ('blue', 'grey')), (5, ('green', 'black')), (5,('green', 'white'))]
+
+//rightOuterJoin
+b.rightOuterJoin(d).collect()
+[(4, ('blue', 'grey')), (5, ('green', 'black')), (5, ('green', 'white'))]
+
+//fullOuterJoin
+b.fullOuterJoin(d).collect()
+[(6, ('orange', None)), (4, ('blue', 'grey')), (5, ('green', 'black')), (5,('green', 'white'))]
+
+
+
+3. reduceByKey operation
+The reduceByKey operation merges the values for each key using an associative reduce function. 
+This will also perform the merging locally on each mapper before sending results to a reducer and producing hash-partitioned output.
+a = sc.parallelize(["black", "blue", "white", "green", "grey"], 2)
+b = a.map(lambda x: (len(x), x))
+b.collect()
+[(5, 'black'), (4, 'blue'), (5, 'white'), (5, 'green'), (4, 'grey')]
+b.reduceByKey(lambda x,y: x + y).collect()
+[(4, 'bluegrey'), (5, 'blackwhitegreen')]
+
+#Will add the values/Strings of same KeyValues. Example : All 4, 5
+
+
+4. aggregate operation #Check this operation 
+The aggregrate operation returns an RDD with the keys of each tuple.
+
+z = sc.parallelize([1,2,7,4,30,6], 2)
+z.aggregate(0,(lambda x, y: max(x, y)),(lambda x, y: x + y))
+37
+
+z = sc.parallelize(["a","b","c","d"],2)
+z.aggregate("",(lambda x, y: x + y),(lambda x, y: x + y))
+'abcd'
+
+z.aggregate("s",(lambda x, y: x + y),(lambda x, y: x + y))
+'ssabsscds'
+
+z = sc.parallelize(["12","234","345","56789"], 2)
+z.aggregate("",(lambda x, y: str(max(len(str(x)), len(str(y))))),(lambda x,y: str(y) + str(x)))
+'53'
+
+z.aggregate("",(lambda x, y: str(min(len(str(x)), len(str(y))))),(lambda x,y: str(y) + str(x)))
+'11'
+
+z = sc.parallelize(["12","234","345",""],2)
+z.aggregate("",(lambda x, y: str(min(len(str(x)), len(str(y))))),(lambda x,y: str(y) + str(x)))
+'01'
+
+
+Actions: Once an RDD is created various transformations get executed only when an action is performed on it. 
+The result of an action can either be data written back to the storage system or returned to the driver program 
+that initiated this for further computation locally to produce the final result.
+1. collect()
+2. count()
+3. take(n)
+4. first()
+5. takeSample()
+6. countByKey()
+
+
+Calling collect () on an RDD will return the entire dataset to the driver which can cause out of memory and we should avoid that.
+Collect (Action) - Return all the elements of the dataset as an array at the driver program. 
+This is usually useful after a filter or other operation that returns a sufficiently small subset of the data.
+
+
+1. collect()
+The collect() function returns all the results of an RDD operation as an array to the driver program. 
+This is usually useful for operations that produce sufficiently small datasets. 
+Ideally, the result should easily fit in the memory of the system that's hosting the driver program.
+
+2. count()
+This returns the number of elements in a dataset or the resulting output of an RDD operation.
+
+3. take(n)
+The take(n) function returns the first (n) elements of a dataset or the resulting output of an RDD operation.
+
+4. first()
+The first() function returns the first element of the dataset or the resulting output of an RDD operation. 
+It works similarly to the take(1) function.
+
+5. takeSample()
+The takeSample(withReplacement, num, [seed]) function returns an array with a random sample of elements from a dataset. 
+It has three arguments as follows:
+
+1. withReplacement/withoutReplacement: This indicates sampling with or without replacement (while taking multiple samples, 
+it indicates whether to replace the old sample back to the set and then take a fresh sample or sample without replacing). 
+For withReplacement, argument should be True and False otherwise.
+2. num: This indicates the number of elements in the sample. 
+3. Seed: This is a random number generator seed (optional).
+
+6. countByKey()
+The countByKey() function is available only on RDDs of type key value. It returns a table of (K, Int) pairs with the count of each key.
+
+
+#DataFrames - Introduction
+Interactive data analysis gets easier with datasets that can be represented as named columns, 
+which was not the case with plain RDDs. So, the need for a schema-based approach to represent data 
+in a standardized way was the inspiration behind DataFrames.
+
+
+1.Why DataFrames?
+2.Spark SQL
+>Catalyst optimizer
+3.DataFrame API
+>DataFrame basics
+>RDD versus DataFrame
+4.Creating DataFrames 
+>From RDDs
+>From JSON
+>From JDBC sources 
+>From other data sources
+5.Manipulating DataFrames
+
+
+1.Why DataFrames?
+Though Spark provided a functional programming API to manipulate distributed collections of data, it ended up with tuples (_1, _2, ...)
+Coding to operate on tuples was a little complicated and messy, and was slow at times. 
+So, a standardized layer was needed, with the following characteristics:
+1.Named columns with a schema
+2.Functionality to consolidate data from various data sources such as 
+Hive, Parquet, SQL Server, PostgreSQL, JSON, and also Spark's native RDDs, and unify them to a common format
+3.Ability to take advantage of built-in schemas in special file formats such as Avro, CSV, JSON, and so on.
+
+
+2.Spark SQL
+Spark SQL can also be used to read data from an existing Hive installation. 
+Apart from these plain SQL operations, Spark SQL also addresses some tough problems. 
+Designing complex logic through relational queries was cumbersome and almost impossible at times. 
+So, Spark SQL was designed to integrate the capabilities of relational processing and 
+functional programming so that complex logics can be implemented, optimized, and scaled on a distributed computing setup.
+
+There are basically three ways to interact with Spark SQL, including SQL, the DataFrame API, and the Dataset API.
+
+Through the declarative syntax, users can focus on what the program should accomplish and 
+not bother about the control flow, which will be taken care of by the Catalyst optimizer, built inside Spark SQL.
+
+>Catalyst optimizer
+1.Spark has built-in support for JSON schema inference. 
+Users can just create a table out of any JSON file by registering it as a table and simply query it with SQL syntaxes.
+2.built-in support for CSV, XML, and other formats
+
+
+
+3.DataFrame API
+A two-dimensional data structure that usually has labelled rows and columns is called a DataFrame in some realms, 
+such as R DataFrames and Python's Pandas DataFrames.
+>DataFrame basics
+Unlike RDDs, however, they keep track of schemas and facilitate relational operations as well as procedural operations such as map.
+>RDD versus DataFrame
+
+Similarities:
+Both can handle disparate data sources
+Both are lazily evaluated (execution happens when an output operation is performed on them), thereby having the ability to take the most optimized execution plan
+
+Differences between DataFrames:
+DataFrames are a higher-level abstraction than RDDs.
+The definition of RDD implies defining a Directed Acyclic Graph (DAG) whereas defining a DataFrame leads to the creation of an Abstract Syntax Tree (AST). An AST will be utilized and optimized by the Spark SQL catalyst engine.
+RDD is a general data structure abstraction whereas a DataFrame is a specialized data structure to deal with two-dimensional, 
+table-like data.
+
+
+4.Creating DataFrames 
+Spark DataFrame creation is similar to RDD creation. To get access to the DataFrame API, you need SQLContext or HiveContext as an entry point.
+
+>From RDDs
+The following code creates an RDD from a list of colors followed by a collection of tuples containing the color name and its length. 
+It creates a DataFrame using the toDF method to convert the RDD into a DataFrame. 
+The toDF method takes a list of column labels as an optional argument:
+
+#Create a list of colours
+colors = ['white','green','yellow','red','brown','pink']
+#Distribute a local collection to form an RDD
+#Apply map function on that RDD to get another RDD containing colour, length tuples
+color_df = sc.parallelize(colors).map(lambda x:(x,len(x))).toDF(["color","length"])
+#DataFrame[color: string, length: bigint]
+color_df.dtypes  #Note the implicit type inference
+#[('color', 'string'), ('length', 'bigint')]
+color_df.show()  #Final output as expected. Order need not be the same as shown
+
+color_df = sc.parallelize(colors).map(lambda x:(x,len(x))).toDF(["hello","length"])
+
+We created an RDD here and then transformed that to tuples which are then sent to the toDF method. 
+Note that toDF takes a list of tuples instead of scalar elements. 
+You need to pass tuples even to create single-column DataFrames. 
+Each tuple is akin to a row. You can optionally label the columns; 
+otherwise, Spark creates obscure names such as _1, _2. Type inference of the columns happens implicitly.
+
+>From JSON
+#The Spark DataFrame API lets developers convert JSON objects into DataFrames and vice versa.
+#Pass the source json data file path
+df = sqlContext.read.json("./authors.json")
+df.show() #json parsed; Column names and data types inferred implicitly
+#Spark infers schemas automatically from the keys and creates a DataFrame accordingly.
+
+
+>From JDBC sources 
+#Launch shell with driver-class-path as a command line argument
+pyspark --driver-class-path /usr/share/   java/mysql-connector-java.jar
+#Pass the connection parameters
+peopleDF = sqlContext.read.format('jdbc').options(
+                           url = 'jdbc:mysql://localhost',
+                           dbtable = 'test.people',
+                           user = 'root',
+                           password = 'mysql').load()
+#Retrieve table data as a DataFrame
+peopleDF.show()
+
+>From other data sources
+#Creating DataFrames from Apache Parquet
+Apache Parquet is an efficient, compressed columnar data representation available to any project in the Hadoop ecosystem. 
+Columnar data representations store data by column, as opposed to the traditional approach of storing data row by row. 
+Use cases that require frequent querying of two to three columns from several columns benefit greatly from 
+such an arrangement because columns are stored contiguously on the disk and you do not have to read unwanted columns in row-oriented storage. 
+Another advantage is in compression. Data in a single column belongs to a single type. The values tend to be similar, and sometimes identical. 
+These qualities greatly enhance compression and encoding efficiency. 
+Parquet allows compression schemes to be specified on a per-column level and allows adding more encodings as they are invented and implemented.
+
+
+#The following example writes the people data peopleDF loaded into a DataFrame in the previous example into Parquet format and 
+#then re-reads it into an RDD:
+#Write DataFrame contents into Parquet format
+peopleDF.write.parquet('writers.parquet')
+#Read Parquet data into another DataFrame
+writersDF = sqlContext.read.parquet('writers.parquet')
+#writersDF: org.apache.spark.sql.DataFrame = [first_name: last_name: string, gender: string, dob:    date, occupation: string, person_id: int]
+
+
+DataFrame Operations:
+Developers chain multiple operations to filter, transform, aggregate, and sort data in the DataFrames. 
+The underlying Catalyst optimizer ensures efficient execution of these operations. 
+These functions you find here are similar to those you commonly find in SQL operations on tables:
+
+
+#Create a local collection of colors first
+colors = ['white','green','yellow','red','brown','pink']
+#Distribute the local collection to form an RDD
+#Apply map function on that RDD to get another RDD containing colour, length tuples and convert that RDD to a DataFrame
+color_df = sc.parallelize(colors).map(lambda x:(x,len(x))).toDF(['color','length'])
+#Check the object type
+color_df
+#DataFrame[color: string, length: bigint]
+#Check the schema
+color_df.dtypes
+#[('color', 'string'), ('length', 'bigint')]
+#Check row count
+
+
+ //List out column names
+color_df.columns
+#[u'color', u'length']
+#Drop a column. The source DataFrame color_df remains the same. //Spark returns a new DataFrame which is being passed to show
+color_df.drop('length').show()
+
+
+//Convert to JSON format
+color_df.toJSON().first()
+'{"color":"white","length":5}'
+#filter operation is similar to WHERE clause in SQL
+#//You specify conditions to select only desired columns and rows
+#//Output of filter operation is another DataFrame object that is usually passed on to some more operations
+#//The following example selects the colors having a length of four or five only and label the column as "mid_length"
+filter
+------
+color_df.filter(color_df.length.between(4,5)).select(color_df.color.alias("mid_length")).show()
+
+
+//This example uses multiple filter criteria
+color_df.filter(color_df.length > 4).filter(color_df[0]!="white").show()
+
+
+//Sort the data on one or more columns
+sort
+----
+#A simple single column sorting in default (ascending) order
+color_df.sort("color").show()
+#//First filter colors of length more than 4 and then sort on multiple columns
+#/The Filtered rows are sorted first on the column length in default ascending order. 
+# Rows with same length are sorted on color in descending order
+color_df.filter(color_df['length']>=4).sort("length",'color',ascending=False).show()
+
+
+//You can use orderBy instead, which is an alias to sort
+color_df.orderBy('length','color').take(4)
+#[Row(color=u'red', length=3), Row(color=u'pink', length=4),
+#Row(color=u'brown', length=5), Row(color=u'green', length=5)]
+#//Alternative syntax, for single or multiple columns.
+color_df.sort(color_df.length.desc(),color_df.color.asc()).show()
+
+//All the examples until now have been acting on one row at a time, filtering or transforming or reordering.
+#The following example deals with regrouping the data
+#These operations require "wide dependency" and often involve shuffling.
+groupBy
+-------
+color_df.groupBy('length').count().show()
+
+//Data often contains missing information or null values. We may want to drop such rows or replace with some filler information. 
+#dropna is provided for dropping such rows
+#The following json file has names of famous authors. Firstname data is missing in one row.
+#dropna
+------
+df1 = sqlContext.read.json('./authors_missing.json')
+df1.show()
+
+
+//Let us drop the row with incomplete information
+df2 = df1.dropna()
+df2.show()  #Unwanted row is dropped
+
+
+You already know by now that the DataFrame API is empowered by Spark SQL and that the Spark SQL's Catalyst optimizer plays a crucial role 
+in optimizing the performance. Though the query is executed lazily, it uses the catalog component of Catalyst to identify whether 
+the column names used in the program or expressions exist in the table being used and the data types are proper, 
+and also takes many other such precautionary actions. The advantage to this approach is that, instead of waiting till program execution, 
+an error pops up as soon as the user types an invalid expression.
+
+
+
+
+Page 86
