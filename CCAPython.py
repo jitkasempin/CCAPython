@@ -1393,7 +1393,62 @@ orderItemsMap = orderItems.map(lambda oi: int(oi.split(",")[1], float(oi.split("
 revenuePerOrder = orderItemsMap.reduceByKey(lambda curr, next: curr + next)
 for i in revenuePerOrder.take(10): print(i)
 
+#Don't use collect() to preview the data. 
+Convert RDD into list (collection)
+take
+collect 
+count
 
+
+@Spark Create RDD using Parallelize
+#07 Apache Spark Core APIs - Create RDD using parallelize
+
+Convert Collection into RDD
+hadoop fs -ls /public/retail_db/order_items
+
+productsRaw = open("path").read().splitlines()
+type(productsRaw)
+productsRDD = sc.parallelize(productsRaw)
+type(productsRDD)
+
+@Spark Read data from different file formats 
+#08 Apache Spark Core APIs - Read data from different file formats
+1.Data Frame (Distributed collection with structure)
+2.APIs provided by sqlContext
+3.Supported file format
+orc
+json
+parquet
+avro
+4. Previewing the data
+show
+
+#Data Frame have a structure and sqlContext will give APIs to access it. 
+#sqlcontext is of type HiveContext 
+
+load and read : load and read can be used to read data of different file formats. 
+
+Read : APIs to read the data 
+orc
+json
+parquet
+text
+avro - third party plugin 
+
+help(sqlcontext.read.json)
+help(sqlcontext.read.orc)
+help(sqlcontext.read.parquet)
+help(sqlcontext.read.text) - except for text every file format have metadata associated to them.
+
+#Types using load and read 
+sqlcontext.load("/path", "json").show()
+sqlcontext.read.json("/path").show()
+Both are for the same purpose. 
+Load and Read can be used to read the data into a DataFrame and then we can perform DF operations of SQL on top of it. 
+
+@Spark Standard Transformation 
+#Apache Spark Core APIs - Row level transformations - String manipulation
+String Manipulation (python)
 
 
 
