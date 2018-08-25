@@ -1120,7 +1120,7 @@ sqoop export \
 --connect jdbc:mysql://ms.itversity.com:3306/retail_export \
 --username retail_user \
 --password itversity \
---export-dir / apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--export-dir /apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
 --table daily_revenue \
 --update-key order_date \
 --input-fields-terminated-by "\001"
@@ -1134,7 +1134,7 @@ sqoop export \
 --connect jdbc:mysql://ms.itversity.com:3306/retail_export \
 --username retail_user \
 --password itversity \
---export-dir / apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--export-dir /apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
 --table daily_revenue \
 --update-key order_date \
 --update-mode allowinsert \
@@ -1423,7 +1423,7 @@ avro
 4. Previewing the data
 show
 
-#Data Frame have a structure and sqlContext will give APIs to access it. 
+#DataFrame have a structure and sqlContext will give APIs to access it. 
 #sqlcontext is of type HiveContext 
 
 load and read : load and read can be used to read data of different file formats. 
@@ -1448,7 +1448,25 @@ Load and Read can be used to read the data into a DataFrame and then we can perf
 
 @Spark Standard Transformation 
 #Apache Spark Core APIs - Row level transformations - String manipulation
-String Manipulation (python)
+String Manipulation (python) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
