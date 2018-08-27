@@ -1060,7 +1060,7 @@ sqoop export \
 --connect jdbc:mysql://ms.itversity.com:3306/retail_export \
 --username retail_user \
 --password itversity \
---export-dir / apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--export-dir /apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
 --table daily_revenue_demo \
 --columns order_date, revenue \
 --input-fields-terminated-by "\001"
@@ -1731,8 +1731,9 @@ PerGroup aggregations
 2. reduceByKey - more preferred
 3. aggregateKey - more preferred 
 
+
 @Spark Aggregations count and reduce 
-#17 Apache Spark Core APIs - Aggregations - count and reduce
+74 #17 Apache Spark Core APIs - Aggregations - count and reduce
 count() 	    Return the number of elements in the dataset. 
 reduce(func) 	Aggregate the elements of the dataset using a function func (which takes two arguments and returns one). The function should be commutative and associative so that it can be computed correctly in parallel. 
 
@@ -1742,11 +1743,189 @@ Both reduce and count are action and when ever they are invoked DAG will be invo
 orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
 orderItems.count()
 
+#Aggregations - total -Get revenue for given order_id 
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+
+orderItemsFiltered = orderItems.filter(lambda oi: int(oi.split(",")[1]) == 2)
+orderItemsSubtotals = orderItemsFiltered.map(lambda oi: float(oi.split(",")[4]))
+
+from operator import add
+orderItemsSubtotals.reduce(add)
+or 
+orderItemsSubtotals.reduce(lambda x, y: x + y)
+
+>>> from operator import add
+>>> orderItemsSubtotals.reduce(add)
+579.98
+>>> 
+
+
+for i in orderItemsSubtotals.take(10): print(i)
+
+>>> for i in orderItemsFiltered.take(10): print(i)
+... 
+2,2,1073,1,199.99,199.99
+3,2,502,5,250.0,50.0
+4,2,403,1,129.99,129.99
+
+
+@Spark Aggregations Reduce Cont.
+#18 Apache Spark Core APIs - Aggregations - reduce contd
+
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+
+orderItemsFiltered = orderItems.filter(lambda oi: int(oi.split(",")[1]) == 2)
+
+#We are not transforming the record into some other record so, no need of map.
+orderItemsSubtotals = orderItemsFiltered.map(lambda oi: float(oi.split(",")[4]))
+
+orderItemsFiltered.reduce(lambda x, y: x if (float(x.split(",")[4]) < float(y.split(",")[4])) else y)
+
+x if (True) else y
+#Result : 
+# '4,2,403,1,129.99,129.99'
+
+@Spark Aggregations countByKey 
+76 #19 Apache Spark Core APIs - Aggregations - countByKey
+countByKey() 	Only available on RDDs of type (K, V). Returns a hashmap of (K, Int) pairs with the count of each key. 
+
+It returns hashmap, so working in spark is not straight forward.So, countByKey is just used to preview the data.
+
+#Get Count by Status. 
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+ordersStatus = orders.map(lambda o: (o.split(",")[3], 1))
+for i in ordersStatus.take(10): print(i)
+
+>>> for i in ordersStatus.take(10): print(i)
+... 
+('CLOSED', 1)
+('PENDING_PAYMENT', 1)
+('COMPLETE', 1)
+('CLOSED', 1)
+('COMPLETE', 1)
+('COMPLETE', 1)
+('COMPLETE', 1)
+('PROCESSING', 1)
+('PENDING_PAYMENT', 1)
+('PENDING_PAYMENT', 1)
+
+(K, V)
+
+countByStatus = ordersStatus.countByKey()
+
+>> > countByStatus
+defaultdict( < class 'int' > , {'CLOSED': 7556, 'PENDING_PAYMENT': 15030, 'COMPLETE': 22899, 'PROCESSING': 8275, 'PAYMENT_REVIEW': 729, 'PENDING': 7610, 'ON_HOLD': 3798, 'CANCELED': 1428, 'SUSPECTED_FRAUD': 1558})
+>> >
+
+#reduce, group, aggregate ByKey are transformations. When they execute the output will be of type RDD.
+
+
+@spark Aggregations groupByKey
+#20 Apache Spark Core APIs - Aggregations - RevenuePerOrderId using groupByKey
+Least preferred way as it doesn't use combiner. 
+
+#Get Revenue for each orderID. 
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+for i in orderItemsMap.take(10): print(i)
+orderItemsGroupByOrderId = orderItemsMap.groupByKey()
+#for i in orderItemsGroupByOrderId.take(10): print(i)
+#l = orderItemsGroupByOrderId.first()
+revenuePerOrderId = orderItemsGroupByOrderId.map(lambda oi: (oi[0], round(sum(oi[1]),2)))
+for i in revenuePerOrderId.take(10): print(i)
+
+@Spark sorting data using groupbyKey
+#21 Apache Spark Core APIs - sorting data using groupByKey
+
+#Get order item details in decending order by revenue - groupByKey 
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), oi))
+>>> for i in orderItemsMap.take(10):print(i)
+... 
+(1, '1,1,957,1,299.98,299.98')
+(2, '2,2,1073,1,199.99,199.99')
+(2, '3,2,502,5,250.0,50.0')
+(2, '4,2,403,1,129.99,129.99')
+(4, '5,4,897,2,49.98,24.99')
+(4, '6,4,365,5,299.95,59.99')
+(4, '7,4,502,3,150.0,50.0')
+(4, '8,4,1014,4,199.92,49.98')
+(5, '9,5,957,1,299.98,299.98')
+(5, '10,5,365,5,299.95,59.99')
+
+for i in orderItemsMap.take(10):print(i)
+# 2,2,1073,1,199.99,199.99 - Sort data in decending order for revenue 
+we can use groupByKey and use pythons sort apis we can solve the problem.
+orderItemsGroupByOrderId = orderItemsMap.groupByKey()
+for i in orderItemsGroupByOrderId.take(10):print(i)
+
+orderItemsSortedBySubtotalPerOrder = orderItemsGroupByOrderId.map(lambda oi:sorted(oi[1], key=lambda k: float(k.split(",")[4]), reverse = True))
+for i in orderItemsSortedBySubtotalPerOrder.take(10):print(i)
+
+#Logic
+sorted(l[1], key = lambda k: float(k.split(",")[4]), reverse=True) 
+#notes
+groupByKey follows map and followed by map or flatmap. 
+first map : for K V pair 
+map after groupByKey is to perform aggregations or sorting. 
+
+
+@Spark using reducebyKey
+79 #22 Apache Spark Core APIs - Aggregations - RevenuePerOrderId using reduceByKey
+reduceByKey(func, [numTasks]) 	When called on a dataset of (K, V) pairs, 
+returns a dataset of (K, V) pairs where the values for each key are aggregated using the given 
+reduce function func, which must be of type (V,V) => V. Like in groupByKey, 
+the number of reduce tasks is configurable through an optional second argument. (
+func, [numTasks]) 	When called on a dataset of (K, V) pairs, returns a dataset of (K, V) pairs 
+where the values for each key are aggregated using the given reduce function func, which must be of type (V,V) => V. 
+Like in groupByKey, the number of reduce tasks is configurable through an optional second argument. 
+
+reduceByKey needs a paired RDD and also returns a paired RDD
+
+#Get revenue for each order_id - reduceByKey
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+
+#Result:
+>>> for i in orderItemsMap.take(10): print(i)
+... 
+(1, 299.98)
+(2, 199.99)
+(2, 250.0)
+(2, 129.99)
+(4, 49.98)
+(4, 299.95)
+(4, 150.0)
+(4, 199.92)
+(5, 299.98)
+(5, 299.95)
+
+from operator import add
+revenuePerOrderId = orderItemsMap.reduceByKey(add)
+revenuePerOrderId = orderItemsMap.reduceByKey(lambda x,y : x + y)
+for i in revenuePerOrderId.take(10): print(i)
+minSubtotalPerOrderId = orderItemsMap.reduceByKey(lambda x,y : x if(x < y) else y)
+for i in minSubtotalPerOrderId.take(10): print(i)
+
+#Get order item details with min subtotal for each order_id 
+
+minSubtotalPerOrderId = orderItemsMap.reduceByKey(lambda x, y: x if(float(x.split(",")[4]) < float(y.split(",")[4])) else y)
+for i in minSubtotalPerOrderId.take(10): print(i)
+
+Combiner logic and reducer logic are almost same.
+
+@Spark Using aggregateByKey
+80 #23 Apache Spark Core APIs - Aggregations - RevenueAndCountPerOrderId using aggregateByKey
 
 
 
 
-@Spark Run using spark-submit 
+
+
+
+
+
+@Spark Run using spark submit 
 111 #54 Apache Spark Core APIs - Get daily revenue per product - Run using spark-submit
 
 @Spark SQL 
