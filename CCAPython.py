@@ -1094,7 +1094,6 @@ Syntax for stored procedure will be different for different target datases.
 Give the stored procedure name without arguments. 
 
 #Updating the data 
-
 create table daily_revenue (
 order_date varchar(30) primary key,
 revenue float
@@ -1407,13 +1406,13 @@ Convert Collection into RDD
 hadoop fs -ls /public/retail_db/order_items
 
 productsRaw = open("path").read().splitlines()
-type(productsRaw)
+type(productsRaw) #List
 productsRDD = sc.parallelize(productsRaw)
-type(productsRDD)
+type(productsRDD) #RDD
 
 @Spark Read data from different file formats 
 #08 Apache Spark Core APIs - Read data from different file formats
-1.Data Frame (Distributed collection with structure)
+1.DataFrame (Distributed collection with structure)
 2.APIs provided by sqlContext
 3.Supported file format
 orc
@@ -1438,7 +1437,7 @@ avro - third party plugin
 help(sqlcontext.read.json)
 help(sqlcontext.read.orc)
 help(sqlcontext.read.parquet)
-help(sqlcontext.read.text) - except for text every file format have metadata associated to them.
+help(sqlcontext.read.text) - except for text every file format have metadata associated to it.
 
 #Types using load and read 
 sqlcontext.load("/path", "json").show()
@@ -1446,38 +1445,337 @@ sqlcontext.read.json("/path").show()
 Both are for the same purpose. 
 Load and Read can be used to read the data into a DataFrame and then we can perform DF operations of SQL on top of it. 
 
+
 @Spark Standard Transformation 
 #Apache Spark Core APIs - Row level transformations - String manipulation
-String Manipulation (python) 
+1. String Manipulation (python) 
+orders = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/orders/")
+orders.first()
+'1,2013-07-25 00:00:00.0,11599,CLOSED'
+>> > type(orders.first)
+<class 'method' >
+>> > s = orders.first()
+>> > s
+'1,2013-07-25 00:00:00.0,11599,CLOSED'
+>> > type(s)
+<class 'str' >
+>> > s[0]
+'1'
+>> > s[1]
+','
+>> > s[:5]
+'1,201'
+>> > s[:10]
+'1,2013-07-'
+>> > len(s)
+36
+>> > s[2:11]
+'2013-07-2'
+>> > s[2:12]
+'2013-07-25'
+>> > s.split(",")
+['1', '2013-07-25 00:00:00.0', '11599', 'CLOSED']
+>> > type(s.split(","))
+<class 'list' >
+>> > s.split(",")[2]
+'11599'
+>> > s.split(",")[1]
+'2013-07-25 00:00:00.0'
+>> > int(s.split(",")[0])
+1
+>> > a = int(s.split(",")[0])
+>> > type(a)
+<class 'int' >
+>> > int(s.split(",")[1].split(" ")[0].replace("-", ""))
+20130725
+>> > b = s.split(",")[1].split(" ")[0].replace("-", "")
+>> > b
+'20130725'
+>> > b[:4]
+'2013'
+>> > c = int(b[:4])
+>> > c
+2013
+
+
+@Spark Row level Transformations using MAP
+#Apache Spark Core APIs - Row level transformations - using map
+1. Row level transformations
+
+map(func) 	Return a new distributed dataset formed by passing each element of the source through a function func.
+
+>> > orders.map(lambda o: int(o.split(",")[1].split(" ")[0].replace("-", ""))).first()
+20130725
+>> > orders.map(lambda o: int(o.split(",")[1].split(" ")[0].replace("-", ""))).take(10)
+[20130725, 20130725, 20130725, 20130725, 20130725, 20130725, 20130725, 20130725, 20130725, 20130725]
+>> > orders.map(lambda o: int(o.split(",")[1].split(" ")[0].replace("-", ""))).count()
+68883
+>> > orders.count()
+68883
+
+
+#Note: for reduce, sort, aggregate - ByKey etc, they need K V pair. 
+
+>> > orders.map(lambda o: (o.split(",")[3], )).first()
+('CLOSED',)
+>> > orders.map(lambda o: (o.split(",")[3], 1)).first()
+('CLOSED', 1)
+>> > orders.map(lambda o: (o.split(",")[3], 1)).take(1)
+[('CLOSED', 1)]
+>> > orders.map(lambda o: (o.split(",")[3], 1)).take(10)
+[('CLOSED', 1), ('PENDING_PAYMENT', 1), ('COMPLETE', 1), ('CLOSED', 1), ('COMPLETE', 1),
+ ('COMPLETE', 1), ('COMPLETE', 1), ('PROCESSING', 1), ('PENDING_PAYMENT', 1), ('PENDING_PAYMENT', 1)]
+
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+>> > orderItems.first()
+'1,1,957,1,299.98,299.98'
+orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+orderItemsMap.first()
+
+
+
+@Spark Row Level Transformations by using flatMap 
+#Apache Spark Core APIs - Row level transformations - using flatMap
+flatMap(func) 	Similar to map, but each input item can be mapped to 0 or more output items(so func should return a Seq rather than a single item).
+
+#flatMap
+lineList = ["How are you?", "Hope you are doing good!", "Let us perform", "word count using flatMap"]
+lines = sc.parallelize(lineList)
+words = lines.flatMap(lambda l: l.split(" "))
+
+#Before Result 
+>> > lineList = ["How are you?", "Hope you are doing good!", "Let us perform", "word count using flatMap"]
+>> > lines = sc.parallelize(lineList)
+>> > lines.collect()
+['How are you?', 'Hope you are doing good!',
+    'Let us perform', 'word count using flatMap']
+>> > for i in lines.collect(): print(i)
+...
+How are you?
+Hope you are doing good!
+Let us perform
+word count using flatMap
+>> >
+
+#After Result
+for i in words.collect():
+    print(i)
+...
+How
+are
+you?
+Hope
+you
+are
+doing
+good!
+Let
+us
+perform
+word
+count
+using
+flatMap
+>>
+
+@Spark Row level Transformations Filtering Data using filter 
+#12 Apache Spark Core APIs - Row level transformations - Filtering data using filter
+3. Filtering (horizontal and vertical)
+
+filter(func) 	Return a new dataset formed by selecting those elements of the source on which func returns true. 
+
+#filter
+orders = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/orders/")
+#for i in orders.take(100): print(i)
+ordersComplete = orders.filter(lambda o: o.split(",")[3] == "COMPLETE")
+ordersComplete = orders.filter(lambda o: o.split(",")[3] == "COMPLETE" or o.split(",")[3] == "CLOSED")
+>>> ordersComplete.count()
+22899
+>>> for i in ordersComplete.take(100): print(i)
+
+ordersComplete = orders.filter(lambda o: (o.split(",")[3] == "COMPLETE" or o.split(",")[3] == "CLOSED") and o.split(",")[1][:7] == "2014-01")
+
+#Same logiv in 
+
+ordersComplete = orders.filter(lambda o: (o.split(",")[3] in ["COMPLETE", "CLOSED"]) and o.split(",")[1][:7] == "2014-01")
+or 
+ordersComplete = orders.filter(lambda o: o.split(",")[3] in ["COMPLETE", "CLOSED"] and o.split(",")[1][:7] == "2014-01")
+
+
+@Spark Joining Data Sets 
+#13 Apache Spark Core APIs - Joining data sets - Introduction
+4. Joins - when data sets are related. 
+
+join(otherDataset, [numTasks]) 	When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W)) pairs with all pairs of elements for each key. Outer joins are supported through leftOuterJoin, rightOuterJoin, and fullOuterJoin. 
+
+
+@Spark Perform Inner Join 
+#14 Apache Spark Core APIs - Joining data sets - Perform inner join
+
+#Joins 
+orders = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/orders")
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+
+#Joining using strings is much expensive compared to join using int. 
+#So, it is not functionalitty correct to keep data as string when its origial type is int. 
+
+ordersMap = orders.map(lambda o: (int(o.split(",")[0]), o.split(",")[1]))
+
+>>> for i in ordersMap.take(10): print(i)
+... 
+(1, '2013-07-25 00:00:00.0')
+(2, '2013-07-25 00:00:00.0')
+(3, '2013-07-25 00:00:00.0')
+(4, '2013-07-25 00:00:00.0')
+(5, '2013-07-25 00:00:00.0')
+(6, '2013-07-25 00:00:00.0')
+(7, '2013-07-25 00:00:00.0')
+(8, '2013-07-25 00:00:00.0')
+(9, '2013-07-25 00:00:00.0')
+(10, '2013-07-25 00:00:00.0')
+
+#order_id as first element, date as second element. 
+
+
+orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+
+>>> for i in orderItemsMap.take(10): print(i)
+... 
+(1, 299.98)
+(2, 199.99)
+(2, 250.0)
+(2, 129.99)
+(4, 49.98)
+(4, 299.95)
+(4, 150.0)
+(4, 199.92)
+(5, 299.98)
+(5, 299.95)
+>>> 
+
+#Order ID as first field, Order Item as second field.
+
+ordersJoin = ordersMap.join(orderItemsMap)
+for i in ordersJoin.take(10): print(i)
+
+#Joins are both preceded by map and may be followed by map if we need to apply further transformations.
+
+>>> ordersJoin = ordersMap.join(orderItemsMap)
+>>> for i in ordersJoin.take(10): print(i)
+... 
+(4, ('2013-07-25 00:00:00.0', 49.98))                                           
+(4, ('2013-07-25 00:00:00.0', 299.95))
+(4, ('2013-07-25 00:00:00.0', 150.0))
+(4, ('2013-07-25 00:00:00.0', 199.92))
+(8, ('2013-07-25 00:00:00.0', 179.97))
+(8, ('2013-07-25 00:00:00.0', 299.95))
+(8, ('2013-07-25 00:00:00.0', 199.92))
+(8, ('2013-07-25 00:00:00.0', 50.0))
+(12, ('2013-07-25 00:00:00.0', 299.98))
+(12, ('2013-07-25 00:00:00.0', 100.0))
+
+#Complete Code:
+orders = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/orders")
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+ordersMap = orders.map(lambda o: (int(o.split(",")[0]), o.split(",")[1]))
+orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+ordersJoin = ordersMap.join(orderItemsMap)
+
+
+
+@Spark Outer Join 
+#15 Apache Spark Core APIs - Joining data sets - Outer join
+
+leftOuterJoin and rightOuterJoin are almost same.
+Full fullOuterJoin is somewhat different, we will see later. 
+
+#Joins 
+orders = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/orders")
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+
+ordersMap = orders.map(lambda o: (int(o.split(",")[0]), o.split(",")[3]))
+orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+
+#LeftouterJoin
+ordersLeftOuterJoin = ordersMap.leftOuterJoin(orderItemsMap)
+ordersLeftOuterJoinFilter = ordersLeftOuterJoin.map(lambda o: o[1][1] == None )
+#RightOuterJoin
+ordersRightOuterJoin = orderItemsMap.rightOuterJoin(ordersMap)
+ordersRightOuterJoinFilter = ordersRightOuterJoin.map(lambda o: o[1][0] == None )
+
+for i in ordersLeftOuterJoinFilter.
+for i in ordersLeftOuterJoin.take(100): print(i)
+ordersJoin.count()
+ordersLeftOuterJoin.count()
+
+With join the table data doesn't matter.
+But when it comes to leftOuterJoin and rightOuterJoin the table position matters. 
+Parent table needs to be left if its leftOuterJoin 
+and the table needs to be right if its rightOuterJoin. 
+
+#FullOuterJoin
+two data sets m/m (many to many) relationship. 
+(A LeftouterJoin B) U (A RightOuterJoin B)
+
+@Spark Aggregations 
+#16 Apache Spark Core APIs - Aggregations - Introduction
+5. Aggregations 
+Taking a group of elements and performing certain operations on the elements returning just 1 value on it.
+Operations: min,max,avg,SD(standard deviation)
+
+#Types of Aggregations:
+Total aggregations
+ByKey aggregations 
+PerGroup aggregations 
+1. groupbyKey
+2. reduceByKey - more preferred
+3. aggregateKey - more preferred 
+
+@Spark Aggregations count and reduce 
+#17 Apache Spark Core APIs - Aggregations - count and reduce
+count() 	    Return the number of elements in the dataset. 
+reduce(func) 	Aggregate the elements of the dataset using a function func (which takes two arguments and returns one). The function should be commutative and associative so that it can be computed correctly in parallel. 
+
+Both reduce and count are action and when ever they are invoked DAG will be invoked.
+
+#Aggregation - total
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+orderItems.count()
 
 
 
 
 
+@Spark Run using spark-submit 
+111 #54 Apache Spark Core APIs - Get daily revenue per product - Run using spark-submit
+
+@Spark SQL 
+112 #01 Spark SQL - Pyspark - Introduction
+
+@Spark DF Operations 
+133 #22 Spark SQL - Data Frame Operations
+
+@Streaming Analytics using Flume Kafka and Spark Streaming 
+134 #01 Streaming Analytics - Introduction
+Spark Streaming alternatives at times - Flink, Storm 
+Flink and Storm not a part of certification.
+
+@Flume Different implementations of agents 
+142 #09 Streaming Analytics - Flume - Different implementations of agents
+
+@Kafka High level architecture 
+143 #10 Streaming Analytics - Kafka - High level architecture
+
+@Spark Streaming 
+147 #14 Spark Streaming - Getting Started
+
+@Kafka and Spark Streaming 
+161 #30 Kafka and Spark Streaming - Department Wise Count - Run and validate application
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+@End of CCA175 relevant topics. 
 
 
 #Inbuilt Functions
@@ -2891,6 +3189,17 @@ Apache Flume and Apache Kafka Data Sources
 Example: Using a Kafka Direct Data Source
 --
 
+
+
+
+
+
+
+
+
+
+
+
 #External Resources/Books Reference: 
 
 #Spark Learning :
@@ -3088,7 +3397,6 @@ a = sc.parallelize(["blue", "green", "orange"], 3)
 b = a.keyBy(lambda x: len(x))
 c = sc.parallelize(["black", "white", "grey"], 3)
 d = c.keyBy(lambda x: len(x))
-
 
 b.join(d).collect()
 [(4, ('blue', 'grey')), (5, ('green', 'black')), (5, ('green', 'white'))]
