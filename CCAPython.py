@@ -1194,7 +1194,7 @@ sqoop export \
 --connect jdbc:mysql://ms.itversity.com:3306/retail_export \
 --username retail_user \
 --password itversity \
---export-dir / apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--export-dir /apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
 --table daily_revenue \
 --input-fields-terminated-by "\001"
 
@@ -1908,22 +1908,334 @@ minSubtotalPerOrderId = orderItemsMap.reduceByKey(lambda x,y : x if(x < y) else 
 for i in minSubtotalPerOrderId.take(10): print(i)
 
 #Get order item details with min subtotal for each order_id 
-
 minSubtotalPerOrderId = orderItemsMap.reduceByKey(lambda x, y: x if(float(x.split(",")[4]) < float(y.split(",")[4])) else y)
 for i in minSubtotalPerOrderId.take(10): print(i)
-
-Combiner logic and reducer logic are almost same.
+#Combiner logic and reducer logic are almost same.
 
 @Spark Using aggregateByKey
 80 #23 Apache Spark Core APIs - Aggregations - RevenueAndCountPerOrderId using aggregateByKey
+aggregateByKey(zeroValue)(seqOp, combOp, [numTasks]) 	When called on a dataset of (K, V) pairs, 
+returns a dataset of (K, U) pairs where the values for each key are aggregated using the given 
+combine functions and a neutral "zero" value. Allows an aggregated value type that is different 
+than the input value type, while avoiding unnecessary allocations. Like in groupByKey, 
+the number of reduce tasks is configurable through an optional second argument. 
+
+#Get revenue and count of items for each order id
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+for i in orderItemsMap.take(10): print(i)
+
+#Result
+...
+(1, 299.98)
+(2, 199.99)
+(2, 250.0)
+(2, 129.99)
+(4, 49.98)
+(4, 299.95)
+(4, 150.0)
+(4, 199.92)
+(5, 299.98)
+(5, 299.95)
+
+input > (order_id, orderItems subtotal) 
+output > (order_id, (tuple))
+
+combiner logic and reducer logic are different. reduceByKey demand the input value type and output value type to be same.
+And also combiner logic and reducer logic to be same. 
+
+revenuePerOrder = orderItemsMap.aggregateByKey((0.0, 0), lambda x, y: (x[0] + y, x[1] + 1), lambda x, y: (x[0] + y[0], x[1] + y[1]))
+
+x type float, y type int 
+
+for i in revenuePerOrder.take(10): print(i)
+
+#Result:
+>>> for i in revenuePerOrder.take(10): print(i)
+... 
+(2, (579.98, 3))                                                                
+(4, (699.85, 4))
+(8, (729.8399999999999, 4))
+(10, (651.9200000000001, 5))
+(12, (1299.8700000000001, 5))
+(14, (549.94, 3))
+(16, (419.93, 2))
+(18, (449.96000000000004, 3))
+(20, (879.8599999999999, 4))
+(24, (829.97, 5))
+>>> 
+
+reducebyKey is simple : Combiner and Reducer logic is same.
+aggregateByKey is almost similar to reducebyKey. 
+GroupbyKey should never be used for aggregations as groupByKey doesn't use combiner to compute the intermediate values.
+
+@Spark Sorting using sortByKey 
+81 #24 Apache Spark Core APIs - Sorting - SortByProductPrice using sortByKey
+6. sortByKey
+sortByKey([ascending], [numTasks]) 	When called on a dataset of (K, V) pairs where K implements Ordered, returns a dataset of (K, V) pairs sorted by keys in ascending or descending order, as specified in the boolean ascending argument.
+
+#sort data by product price - sortByKey 
+products = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/products")
+#sortByKey demands input data to be a paired RDD. 
+productsMap = products.filter(lambda p: p.split(",")[4] != "").map(lambda p: (float(p.split(",")[4]), p))
+#The key which we have to extract to pass to sortByKey is the key on which we want to sort the data.
+#The key in the tuple has to be product price and the value has to be output value. 
+for i in productsMap.take(10): print(i)
+
+... 
+(59.98, '1,2,Quest Q64 10 FT. x 10 FT. Slant Leg Instant U,,59.98,http://images.acmesports.sports/Quest+Q64+10+FT.+x+10+FT.+Slant+Leg+Instant+Up+Canopy')
+(129.99, "2,2,Under Armour Men's Highlight MC Football Clea,,129.99,http://images.acmesports.sports/Under+Armour+Men%27s+Highlight+MC+Football+Cleat")
+>>> 
+
+sortByKey follows map function to convert to tuples or paired rdd.
+
+
+productsSortedByPrice = productsMap.sortByKey()
+for i in productsSortedByPrice.take(10): print(i)
+
+#Just to ignore the information we don't need for further processing. 
+productsSortedMap = productsSortedByPrice.map(lambda p: p[1])
+for i in productsSortedMap.take(10): print(i)
+
+@spark Sorting using sortByKey 
+82 #25 Apache Spark Core APIs - Sorting - composite sorting using sortByKey
+#Sort data by product category and then product price descending - sortByKey 
+products = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/products")
+for i in products.take(10): print(i)
+
+Ascending : Product Category ID 
+Descending : Product Price 
+
+productsMap = products.filter(lambda p: p.split(",")[4] != "").map(lambda p: ((int(p.split(",")[1]), float(p.split(",")[4])), p))
+for i in productsMap.take(10): print(i)
+
+for i in productsMap.sortByKey().take(10): print(i)
+
+#
+If we sort as per sortByKey both the values will be according in the same manner. 
+Field 1, field 2 
+
+Field 1 ASC, Field 2 DESC
+#Trick : Negate based on Key 
+productsMap = products.filter(lambda p: p.split(",")[4] != "").map(lambda p: ((int(p.split(",")[1]), -float(p.split(",")[4])), p))
+#
+for i in productsMap.sortByKey().map(lambda p: p[1]).take(1000): print(i)
+
+#GroupByKey can also be used, if incase if sortByKey doesn't work for requirement. 
+
+@Spark Ranking Introduction 
+83 #26 Apache Spark Core APIs - Ranking - Introduction
+Ranking:
+1. Global  - Take, TakeOrdered, 
+2. ByKey or PerGroup Ranking - groupByKey (converts input RDD to K and array of values)
+
+@Spark Global Ranking 
+84 #27 Apache Spark Core APIs - Global ranking using sortByKey and take
+Global Ranking by using sortByKey and then take()
+
+#Get top N products by price - Global Ranking - sortByKey and take 
+products = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/products")
+productsMap = products.filter(lambda p: p.split(",")[4] != "").map(lambda p: (float(p.split(",")[4])), p))
+productsSortedByPrice = productsMap.sortByKey(False)
+for i in productsSortedByPrice.map(lambda p: p[1]).take(5): print(i)
+
+@Spark takeOrdered or Top 
+85 #28 Apache Spark Core APIs - Global ranking using takeOrdered or top
+takeOrdered(n, [ordering]) 	Return the first n elements of the RDD using either their natural order or a custom comparator. 
+takeOrdered - sort data in ascending order by default defined in lambda function.
+top - sort data in descending order by default. 
+
+products = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/products")
+productsFiltered = products.filter(lambda p: p.split(",")[4] != "")
+for i in productsFiltered.take(10): print(i)
+
+map -> sortByKey -> map -> take
+
+#Top
+topNProducts = productsFiltered.top(5, key = lambda k: float(k.split(",")[4]))
+for i in topNProducts: print(i)
+
+#TakeOrder
+topNProducts = productsFiltered.takeOrdered(5, key = lambda k: -float(k.split(",")[4]))
+for i in topNProducts: print(i)
+
+These are preferred ways than sortByKey. 
+One caviat is in this case, we can get only topN records. If there are duplicates, it will randomly sort them. 
+
+@Spark ByKey or PerGroup Ranking. 
+86 #29 Apache Spark Core APIs - By Key Ranking - GetTopNProductsByPrice
+Performed by groupByKey followed by flatMap. 
+Paired RDD as input and Paired RDD as output. 
+
+If you want to apply ranking on the collection, you have to apply flatmap. 
+
+#Get top N products by price with in each category - By Key ranking - groupByKey and flatMap
+products = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/products")
+productsFiltered = products.filter(lambda p: p.split(",")[4] != "")
+for i in productsFiltered.take(10): print(i)
+
+2 field - product category ID 
+5 field - price 
+within each product cat ID - price should be sorted out in descending order. 
+
+productsMap = productsFiltered.map(lambda p: (int(p.split(",")[1]), p))
+productsGroupByCategoryId = productsMap.groupByKey()
+for i in productsGroupByCategoryId.take(10): print(i)
+
+@Spark using python collections API
+87 #30 Apache Spark Core APIs - By Key Ranking - using python collections API
+to sort or rank the data. 
+
+t = productsGroupByCategoryId.first()
+>>> t = productsGroupByCategoryId.first()
+>>> t
+(2, <pyspark.resultiterable.ResultIterable object at 0x108293e48>)
+>>> t[0]
+2
+>>> t[1]
+<pyspark.resultiterable.ResultIterable object at 0x108293e48>
+>>> 
+
+l = sorted(t[1], key= lambda k: float(k.split(",")[4]), reverse=True)
+l[:3] - to get top 3 records by price within a category. 
+sorted returns a list. 
+
+@Spark using flatMap()
+88 #31 Apache Spark Core APIs - By Key Ranking - using flatMap
+
+topNProductsByCategory = productsGroupByCategoryId.flatMap(lambda p: sorted(p[1], key= lambda k: float(k.split(",")[4]), reverse=True)[:3])
+for i in topNProductsByCategory.take(10): print(i)
+
+
+#Get Top N products by price with in each category - By Key Ranking - GroupByKey and flatMap
+products = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/products")
+productsFiltered = products.filter(lambda p: p.split(",")[4] != "")
+for i in productsFiltered.take(100): print(i)
 
 
 
+@Spark By Key Ranking
+89 #32 Apache Spark Core APIs - By Key Ranking - GetTopNPricedProducts
+
+products=sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/products")
+productsFiltered=products.filter(lambda p: p.split(",")[4] != "")
+productsMap = productsFiltered.map(lambda p: (int(p.split(",")[1]), p))
+productsGroupByCategoryId = productsMap.groupByKey()
+
+@spark By Key Ranking - Python Collections 
+90 #33 Apache Spark Core APIs - By Key Ranking - using Python collections API
+
+products=sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/products")
+productsFiltered=products.filter(lambda p: p.split(",")[4] != "")
+productsMap = productsFiltered.map(lambda p: (int(p.split(",")[1]), p))
+productsGroupByCategoryId = productsMap.groupByKey()
+t = productsGroupByCategoryId.filter(lambda p: p[0] == 59).first()
+l=sorted(t[1], key= lambda k: float(k.split(",")[4]), reverse=True)
+
+>>> for i in l: print(i)
+
+#l is a typical python collection. 
+
+l_map= map(lambda p: float(p.split(",")[4]), l)
+#set(sorted(l_map, reverse=True))
+topNPrices = sorted(set(l_map), reverse=True)[:3]
+#for i in l: print(i)
+#help(it.takewhile) - predicate is a labmda function, second is a collection 
+import itertools as it
+it.takewhile(lambda p: float(p.split(",")[4]) in topNPrices, l)
+
+#we have a to put this logic as a function and invoke that function later. 
+
+@Spark Create Function for ranking 
+91 #34 Apache Spark Core APIs - By Key Ranking - Create function for ranking
+
+def getTopNPricedProductsPerCategoryId(productsPerCategoryId, topN):
+    productsSoted = sorted(productsGroupByCategoryId[1], key = lambda k: float(k.split(",")[4]), reverse=True)
+    productPrices = map(lambda p: float(p.split(",")[4]), productsSorted)
+    topNPrices = sorted(set(productPrices), reverse = True)[:topN]
+    import itertools as it
+    return it.takewhile(lambda p: float(p.split(",")[4]) in topNPrices, productsSorted)
+
+#Check:
+getTopNPricedProductsPerCategoryId(t,3)
+
+Reason: lambda functions have certain limitations, hence we are creating a regular function and invoking that regular function. 
 
 
+@Spark invoke function using flatMap 
+92 #35 Apache Spark Core APIs - By Key Ranking - invoke function using flatMap
+#Get top N priced products - By Key Ranking using groupByKey and flatMap
 
 
+products=sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/products")
+productsFiltered=products.filter(lambda p: p.split(",")[4] != "")
+productsMap = productsFiltered.map(lambda p: (int(p.split(",")[1]), p))
+productsGroupByCategoryId = productsMap.groupByKey()
+for i in productsGroupByCategoryId.take(10): print(i)
+t = productsGroupByCategoryId.filter(lambda p: p[0] == 59).first()
 
+def getTopNPricedProductsPerCategoryId(productsPerCategoryId, topN):
+    productsSoted = sorted(productsGroupByCategoryId[1], key = lambda k: float(k.split(",")[4]), reverse=True)
+    productPrices = map(lambda p: float(p.split(",")[4]), productsSorted)
+    topNPrices = sorted(set(productPrices), reverse = True)[:topN]
+    import itertools as it
+    return it.takewhile(lambda p: float(p.split(",")[4]) in topNPrices, productsSorted)
+
+
+topNPricedProducts = productsGroupByCategoryId.flatMap(lambda p: getTopNPricedProductsPerCategoryId(p,3))
+for i in topNPricedProducts.collect(): print(i)
+
+> groupByKey, flatMap
+
+@Spark Set Operations Introduction
+93 #36 Apache Spark Core APIs - Set Operations - Introduction
+union
+Intersection
+Subtract 
+
+@Spark Prepare Data 
+94 #37 Apache Spark Core APIs - Set Operations - Prepare Data
+Set Operations - Prepare data - subsets for 2013-12 and 2014-01 
+
+#Both the datasets have same identital data fields. Both the datasets will have all the attributes same. 
+orders = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/orders")
+orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
+#Apply map function on filter which will give us a tuple which contain order id as first field and order itself as second field.
+orders201312 = orders.filter(lambda o: o.split(",")[1][:7] == "2013-12").map(lambda o: (int(o.split(",")[0]),o)) #File1 
+for i in orders201312.take(10): print(i)
+orders201401 = orders.filter(lambda o: o.split(",")[1][:7] == "2014-01").map(lambda o: (int(o.split(",")[0]),o)) #File1
+for i in orders201401.take(10): print(i)
+
+orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]),oi)) #File2
+
+orders201312Join = orders201312.join(orderItemsMap)
+for i in orders201312Join.take(10): print(i)
+orders201401Join = orders201401.join(orderItemsMap)
+for i in orders201401Join.take(10): print(i)
+
+orderItems201312 = orders201312.join(orderItemsMap).map(lambda oi: oi[1][1])
+orderItems201401 = orders201401.join(orderItemsMap).map(lambda oi: oi[1][1])
+for i in orderItems201312.take(10): print(i)
+for i in orderItems201401.take(10): print(i)
+
+
+@Spark Set Operations Union 
+95 #38 Apache Spark Core APIs - Set Operations - union
+#Set operations - Union - Get product ids sold in 2013-12 and 2014001
+products201312 = orderItems201312.map(lambda p: int(p.split(",")[2]))
+for i in products201312.take(10): print(i)
+products201401 = orderItems201401.map(lambda p: int(p.split(",")[2]))
+for i in products201401.take(10): print(i)
+
+allproducts = products201312.union(products201401)
+for i in allproducts.take(20): print(i)
+products201312.count()
+products201401.count()
+allproducts.count()
+# When you perform union operation it will not give distinct records. 
+# If you want distinct records from both the datasets after performing uninon operation use dintinct()
+allproducts = products201312.union(products201401).distinct()
+#This how we can Perform Union operations on two identical data sets. 
 
 @Spark Run using spark submit 
 111 #54 Apache Spark Core APIs - Get daily revenue per product - Run using spark-submit
@@ -1951,64 +2263,13 @@ Flink and Storm not a part of certification.
 @Kafka and Spark Streaming 
 161 #30 Kafka and Spark Streaming - Department Wise Count - Run and validate application
 
-
-
-
 @End of CCA175 relevant topics. 
 
 
-#Inbuilt Functions
-#sc - Spark Context 
-#take(n) Return an array with the first n elements of the dataset. 
-
-#31 Apache Spark Core APIs - By Key Ranking - using flatMap
-#Get Top N products by price with in each category - By Key Ranking - GroupByKey and flatMap
-products = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/products")
-productsFiltered = products.filter(lambda p: p.split(",")[4] != "")
-for i in productsFiltered.take(100): print(i)
-
-
-#37 Apache Spark Core APIs - Set Operations - Prepare Data
-#Set operations - Prepare data - subsets of products for 2013-12 and 2014-01 
-#Both the datasets have same identital data fields. Both the datasets will have all the attributes same. 
-orders = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/orders")
-orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
-#Apply map function on filter which will give us a fuple which contain order id as first field and order itself as second field.
-orders201312 = orders.filter(lambda o: o.split(",")[1][:7] == "2013-12").map(lambda o: (int(o.split(",")[0]),o)) #File1 
-for i in orders201312.take(10): print(i)
-orders201401 = orders.filter(lambda o: o.split(",")[1][:7] == "2014-01").map(lambda o: (int(o.split(",")[0]),o)) #File1
-for i in orders201401.take(10): print(i)
-
-orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]),oi)) #File2
-
-orders201312Join = orders201312.join(orderItemsMap)
-for i in orders201312Join.take(10): print(i)
-orders201401Join = orders201401.join(orderItemsMap)
-for i in orders201401Join.take(10): print(i)
-
-orderItems201312 = orders201312.join(orderItemsMap).map(lambda oi: oi[1][1])
-orderItems201401 = orders201401.join(orderItemsMap).map(lambda oi: oi[1][1])
-for i in orderItems201312.take(10): print(i)
-for i in orderItems201401.take(10): print(i)
-
-#38 Apache Spark Core APIs - Set Operations - union
-#Set operations - Union - Get product ids sold in 2013-12 and 2014001
-products201312 = orderItems201312.map(lambda p: int(p.split(",")[2]))
-for i in products201312.take(10): print(i)
-products201401 = orderItems201401.map(lambda p: int(p.split(",")[2]))
-for i in products201401.take(10): print(i)
-allproducts = products201312.union(products201401)
-for i in allproducts.take(20): print(i)
-products201312.count()
-products201401.count()
-allproducts.count()
-# When you perform union operation it will not give distinct records. 
-# If you want distinct records from both the datasets after performing uninon operation use dintinct()
-allproducts = products201312.union(products201401).distinct()
-#This how we can Perform Union operations on two identical data sets. 
-
+@Spark intersect and minus/subtract
 #39 Apache Spark Core APIs - Set Operations - intersect and minus/subtract
 #This operation is nothing but intersection. 
+
 #Set operations - Intersection - Get product ids sold in both 2013-12 and 2014-01
 products201312 = orderItems201312.map(lambda p: int(p.split(",")[2]))
 for i in products201312.take(10): print(i)
@@ -2030,31 +2291,39 @@ product201401only = products201401.subtract(products201312).distinct()
 for i in product201401only.take(10): print(i)
 productsSoldOnlyInOneMonth = product201312only.union(product201401only)
 
-#40 Apache Spark Core APIs - Saving data in text file format
-#saveAsTextFile(path) 	Write the elements of the dataset as a text file (or set of text files) in a given directory in the local filesystem,
-#  HDFS or any other Hadoop-supported file system. Spark will call toString on each element to convert it to a line of text in the file.
-#saveAsSequenceFile(path) Write the elements of the dataset as a Hadoop SequenceFile in a given path in the local filesystem, 
-# HDFS or any other Hadoop-supported file system. This is available on RDDs of key-value pairs that implement Hadoop's Writable interface. 
+@Spark Saving Data in text file format 
+97 #40 Apache Spark Core APIs - Saving data in text file format
+Saving data in text file format
+Compression
+saveAsTextFile(path) 	Write the elements of the dataset as a text file (or set of text files) in a given directory in the local filesystem,
+HDFS or any other Hadoop-supported file system. Spark will call toString on each element to convert it to a line of text in the file.
+
+saveAsSequenceFile(path) Write the elements of the dataset as a Hadoop SequenceFile in a given path in the local filesystem, 
+HDFS or any other Hadoop-supported file system. This is available on RDDs of key-value pairs that implement Hadoop's Writable interface. 
 # In Scala, it is also available on types that are implicitly convertible to Writable (Spark includes conversions for basic types like Int, 
 # Double, String, etc).
-#saveAsObjectFile(path)  Write the elements of the dataset in a simple format using Java serialization, 
-# which can then be loaded using SparkContext.objectFile(). 
-#Typically we use saveAsTextFile on RDD. Spark have other set of apis such as json,avro etc. we will see later. 
+saveAsObjectFile(path)  Write the elements of the dataset in a simple format using Java serialization, 
+which can then be loaded using SparkContext.objectFile(). 
+Typically we use saveAsTextFile on RDD. Spark have other set of apis such as json,avro etc. we will see later. 
 
 #Saving as text files with delimeters - revenue per order id
 orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
 orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), float(oi.split(",")[4])))
+from operator import add
 revenuePerOrderId = orderItemsMap.reduceByKey(add)
 for i in revenuePerOrderId.take(10): print(i)
 
 #If we save the file now each data line will be saved as it is as the data as shown in the output.This will be a problem for downstream apps.
 # So, we will format the data the way we want and then we use saveastext file. Apply map, define lambda fun to process every record into the format we want. 
 
+t = (8, 729.8399999999)
+t[0] + "\t" + t[1]
+
 revenuePerOrderId = orderItemsMap.reduceByKey(add).map(lambda r: str(r[0]) + "\t" + str(r[1]))
 for i in revenuePerOrderId.take(100): print(i)
 
 # logic - str(t[0]) + "\t" + str(t[1])
-#SaveAstextFile is on the top of RDD. 
+#SaveAstextFile is an API on the top of RDD. 
 #In this spark version, the string is not rounded to 2 digits after decimal. So, check it. 
 
 #Use SaveAsTextFile to write the data to HDFS. 
@@ -2065,13 +2334,17 @@ revenuePerOrderId.saveAsTextFile("/Users/srikapardhi/Documents/bigdata/BdProject
 #hadoop fs -ls "file location"
 #hadoop fs -tail "file name to view the data"
 
-#41 Apache Spark Core APIs - Saving data in text file format using compression
+@Spark saving data in text file format using Compression
+98 #41 Apache Spark Core APIs - Saving data in text file format using compression
+Make sure data is saved with proper delimiters 
+Compression 
+
 #Saving RDD back to HDFS
 #Reusing the same code used in previous program. 
 revenuePerOrderId = orderItemsMap.reduceByKey(add).map(lambda r: str(r[0]) + "\t" + str(r[1]))
 
 
-# connect to cluster to check the configured compression codecs. Compression is related to filesystem and hence look at HDFS conf. 
+#connect to cluster to check the configured compression codecs. Compression is related to filesystem and hence look at HDFS conf. 
 cd /etc/hadoop/conf
 vi core-site.xml and search for codecs 
 Configuration : Gzipcodec, defaultcodec, Snappycodec , if not configured work with admin team and get it configured. 
@@ -2081,7 +2354,20 @@ revenuePerOrderId.saveAsTextFile("/Users/srikapardhi/Documents/bigdata/BdProject
 #java.lang.RuntimeException: native snappy library not available: this version of libhadoop was built without snappy support. 
 #Exception will be thrown as there is no hadoop installed.Else file will be saved and we can access the file using sc.textFile. 
 
-#42 Apache Spark Core APIs - Saving data in different file formats - overview using json
+@Spark 
+99 #42 Apache Spark Core APIs - Saving data in different file formats - overview using json
+Supported file formats: out of the box 
+orc 
+json
+parquet 
+-
+avro(with databricks plugin) : Third party plugin 
+
+Steps to save into different file formats 
+1. Makesure data is represented as Data Frame 
+2. Use write or save API to save Data Frame into different file formats
+3. Use compression algoritm if required 
+
 #3rd party plugin from databricks for avro format. Supported file formats. orc,json,parquet,avro. Make sure RDD is convered to DF(Data frame)
 #Saving as JSON - Get revenue per order id
 orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
@@ -2092,18 +2378,79 @@ revenuePerOrderId = orderItemsMap.reduceByKey(add).map(lambda r: (r[0], round(r[
 revenuePerOrderIdDF = revenuePerOrderId.toDF(schema=["order_id","order_revenue"]).show()
 #help(revenuePerOrderIdDF), save(path, format which the file should be saved)
 revenuePerOrderIdDF.save("/Users/srikapardhi/Documents/bigdata/BdProjects/revenue_per_order_json", "json")
-#help(revenuePerOrderIdDF.write())
-revenuePerOrderIdDF.write.json("/Users/srikapardhi/Documents/bigdata/BdProjects/revenue_per_order_json", "json")
+#help(revenuePerOrderIdDF.write()) - write is a package/interface which has sub apis. 
+revenuePerOrderIdDF.write.json("/Users/srikapardhi/Documents/bigdata/BdProjects/revenue_per_order_json")
 #To verify if we are able to read data or not from the loc saved. 
 sqlcontext.read.json("/Users/srikapardhi/Documents/bigdata/BdProjects/revenue_per_order_json").show()
 
 #When data is saved in these file formats we dont need to worry about delimiters. Because they will have meta data linked. But in text we need to take care of delimiters.
+To read DF (Data Frames) - we need to use sqlContext. 
+
+@Spark Problem Statement (Discussed earlier)
+100 #43 Apache Spark Core APIs - Get daily revenue per product - Problem Statement
+Problem Statement Question. 
+
+@Spark Problem Solution
+101 #44 Apache Spark Core APIs - Get daily revenue per product - Launching pyspark
+Solution:
+1. Launch Spark Shell - Understand the environment and use resources optimally 
+2. Read orders and orders_items 
+3. Filter for completed or closed orders
+4. Convert both filtered orders and order_items to key value pairs
+5. Join the two datasets 
+6. Get daily revenue per product id
+7. Load products from local file system and convert into RDD
+8. Join daily revenue per product id with products to get daily revenue per product (by name)
+9. Sort the data by date in ascending order and by daily revenue per product in descending order 
+10. Get data to desired format - order_Date, daily_revenue_per_product, product_name 
+11. Save final output to HDFS in avro file format as well as text file format
+a. HDFS location - avro format /user/Your_user_id/daily_revenue_avro_python
+b. HDFS location - text format /user/Your_user_id/daily_revenue_txt_python
+12. Copy both from HDFS to local file system
+/home/Your_user_id/daily_revenue_python 
 
 
+#Solution:
+1. Launch Spark Shell - Understand the environment and use resources optimally 
+Resource Manager Web Interface: 8088
 
-#43 Apache Spark Core APIs - Get daily revenue per product - Problem Statement
+cd etc/hadoop/conf
+vi yarn-site.xml 
+resourcemanager.webapp.address 
 
-#44 Apache Spark Core APIs - Get daily revenue per product - Launching pyspark
+Memory Total :
+V Cores Total :
+Capacity of cluster: 
+
+Validate Sizes of the data : 
+du - disk usage
+du /data/retail_db/products 
+du -s -h /data/retail_db/products 
+
+same command in hadoop as well:
+hadoop fs -du -s -h /public/retail_db/order_items 
+
+#Typically in exam, they will give more amount of data. 
+In exam if you are unsure : use atleast 
+
+10 node cluster, try to use 20
+20 node cluster, try to use 40
+
+Nodes, *2 will be executors. 
+
+@PySpark shell Command to launch with customized executors and Memory 
+pyspark --master yarn --conf spark.ui.port=12569 --num-executors 2 --executor-memory 512M 
+
+#Notes 
+--conf spark.ui.port=12569 //Not required in certification unless you work in a multi tenant environment. 
+-- number of executors
+-- executor memory
+-- driver memory 
+-- packages
+-- jars
+-- confs 
+-- class 
+
 #Resource Manager IP address: 8088 IP 
 cd /etc/hadoop/conf 
 vi yarn site.xml - Resource Manager Web Address - resourcemanager.webapp.address
@@ -2117,60 +2464,206 @@ Number of Nodes, from resouce manager.
 
 Specify memory and executers through argument. Spark shell can be launched using the below command. 
 
-pyspark --master yarn --conf spark.ui.port=12569 --num-executers 2 --executor-memory 512M 
+#Run spark with required configuration if explicitely given. 
+pyspark --master yarn --conf spark.ui.port=12569 --num-executors 2 --executor-memory 512M 
 
 //Saprk ui port not required in certification unless they ask explicitely.
 if you are unsure about properties, we can check here
 spark-submit 
 most of the control arguments available with spark are available with spark-submit as well.
 
+@Spark Read and Filter for Problem Solution 
+102 #45 Apache Spark Core APIs - Get daily revenue per product - Read and filter
 
-#Filter - We should first focusing on data immediately after reading the data. 
-#Extract Key and Value pairs
-#Joins, Aggregations. 
-
-#Run spark with required configuration if explicitely given. 
-pyspark --master yarn --conf spark.ui.port=12569 --num-executors 2 --executor-memory 512M 
-
-#Read orders and OrderItems 
+@Solution
+2. Read orders and orders_items 
+We can use SparkContext or SQLContext to read data. Here input is textfile format so using sc. 
+#Code
 orders = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/orders")
 for i in orders.take(10): print(i)
 orders.count()
+
+Orders Table:
+1.order_id
+2.order_date 
+3.order_customer_id 
+4.order_status 
+
+... 
+1,2013-07-25 00:00:00.0,11599,CLOSED
+2,2013-07-25 00:00:00.0,256,PENDING_PAYMENT
+3,2013-07-25 00:00:00.0,12111,COMPLETE
+4,2013-07-25 00:00:00.0,8827,CLOSED
+5,2013-07-25 00:00:00.0,11318,COMPLETE
+6,2013-07-25 00:00:00.0,7130,COMPLETE
+7,2013-07-25 00:00:00.0,4530,COMPLETE
+8,2013-07-25 00:00:00.0,2911,PROCESSING
+9,2013-07-25 00:00:00.0,5657,PENDING_PAYMENT
+10,2013-07-25 00:00:00.0,5648,PENDING_PAYMENT
 
 orderItems = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/order_items")
 for i in orderItems.take(10): print(i)
 orderItems.count()
 
+orderItems Table:
+1.order_item_id
+2.order_item_order_id
+3.order_item_product_id
+4.order_item_quantity
+5.order_item_subtotal
+6.order_item_product_price  
+
+... 
+1,1,957,1,299.98,299.98
+2,2,1073,1,199.99,199.99
+3,2,502,5,250.0,50.0
+4,2,403,1,129.99,129.99
+5,4,897,2,49.98,24.99
+6,4,365,5,299.95,59.99
+7,4,502,3,150.0,50.0
+8,4,1014,4,199.92,49.98
+9,5,957,1,299.98,299.98
+10,5,365,5,299.95,59.99
+
+
+#Filter - We should first focusing on data immediately after reading the data. 
+#Extract Key and Value pairs
+#Joins, Aggregations. 
+
+@Solution 
+3. Filter for completed or closed orders
 #Filter for Completed and Closed Orders 
 #for i in orders.map(lambda o: o.split(",")[3]).distinct().collect(): print(i)
-#Collect will convert RDD to Array 
+... 
+CLOSED
+CANCELED
+PENDING_PAYMENT
+COMPLETE
+PROCESSING
+PAYMENT_REVIEW
+PENDING
+ON_HOLD
+SUSPECTED_FRAUD
+...
+#Collect will convert entire RDD to Array 
 ordersFiltered = orders.filter(lambda o: o.split(",")[3] in ["COMPLETE", "CLOSED"])
 for i in ordersFiltered.take(10): print(i)
 ordersFiltered.count() 
+30455
 
+... 
+1,2013-07-25 00:00:00.0,11599,CLOSED
+3,2013-07-25 00:00:00.0,12111,COMPLETE
+4,2013-07-25 00:00:00.0,8827,CLOSED
+5,2013-07-25 00:00:00.0,11318,COMPLETE
+6,2013-07-25 00:00:00.0,7130,COMPLETE
+7,2013-07-25 00:00:00.0,4530,COMPLETE
+12,2013-07-25 00:00:00.0,1837,CLOSED
+15,2013-07-25 00:00:00.0,2568,COMPLETE
+17,2013-07-25 00:00:00.0,2667,COMPLETE
+18,2013-07-25 00:00:00.0,1205,CLOSED
+
+@Spark Joiin order and order_items 
+103 #46 Apache Spark Core APIs - Get daily revenue per product - join order and order_items
+
+@Solution 
+4. Convert both filtered orders and order_items to key value pairs
 #Join order and order_items 
-# Each element needs to be paired RDD, that means tuple. 
+#Each element needs to be paired RDD, that means tuple. 
 ordersMap = ordersFiltered.map(lambda o:(int(o.split(",")[0]), o.split(",")[1]))
 for i in ordersMap.take(10): print(i)
-#OrdersMap - ID and Date from ordersmap
+#OrdersMap - Order ID and Date from ordersmap
+>> > for i in ordersMap.take(10): print(i)
+
+1.order_id
+2.order_date 
+
+...
+(1, '2013-07-25 00:00:00.0')
+(3, '2013-07-25 00:00:00.0')
+(4, '2013-07-25 00:00:00.0')
+(5, '2013-07-25 00:00:00.0')
+(6, '2013-07-25 00:00:00.0')
+(7, '2013-07-25 00:00:00.0')
+(12, '2013-07-25 00:00:00.0')
+(15, '2013-07-25 00:00:00.0')
+(17, '2013-07-25 00:00:00.0')
+(18, '2013-07-25 00:00:00.0')
 
 orderItemsMap = orderItems.map(lambda oi: (int(oi.split(",")[1]), (int(oi.split(",")[2]), float(oi.split(",")[4]))))
 for i in orderItemsMap.take(10): print(i)
-#OrderItemsMap tuple : Product ID and sub total - Tuple. Make sure you have paired RDD before you join data.
+#OrderItemsMap tuple :order id,  Product ID and sub total - Tuple. Make sure you have paired RDD before you join data.
 
+2.order_item_order_id
+
+3.order_item_product_id
+5.order_item_subtotal
+... 
+(1, (957, 299.98))
+(2, (1073, 199.99))
+(2, (502, 250.0))
+(2, (403, 129.99))
+(4, (897, 49.98))
+(4, (365, 299.95))
+(4, (502, 150.0))
+(4, (1014, 199.92))
+(5, (957, 299.98))
+(5, (365, 299.95))
+
+
+@Solution
+5. Join the two datasets 
 #Join Data : Order ID, Date, Product ID and Order Items Subtotal.
 ordersJoin = ordersMap.join(orderItemsMap)
 for i in ordersJoin.take(10): print(i)
 
-#(24, ('2013-07-25 00:00:00.0', (403, 129.99))) -> (('2013-07-25 00:00:00.0',403), 129.99)
+1.order_id AND order_item_order_id
+2.order_date 
+3.order_item_product_id
+4.order_item_subtotal
+
+... 
+(4, ('2013-07-25 00:00:00.0', (897, 49.98)))                                    
+(4, ('2013-07-25 00:00:00.0', (365, 299.95)))
+(4, ('2013-07-25 00:00:00.0', (502, 150.0)))
+(4, ('2013-07-25 00:00:00.0', (1014, 199.92)))
+(12, ('2013-07-25 00:00:00.0', (957, 299.98)))
+(12, ('2013-07-25 00:00:00.0', (134, 100.0)))
+(12, ('2013-07-25 00:00:00.0', (1014, 149.94)))
+(12, ('2013-07-25 00:00:00.0', (191, 499.95)))
+(12, ('2013-07-25 00:00:00.0', (502, 250.0)))
+(24, ('2013-07-25 00:00:00.0', (403, 129.99)))
+
+
+@Solution
+6. Get daily revenue per product id
+104 #47 Apache Spark Core APIs - Get daily revenue per product - Aggregate
+
+(24, ('2013-07-25 00:00:00.0', (403, 129.99))) -> (('2013-07-25 00:00:00.0',403), 129.99)
 #For each element in ordersJoin convert/transform- > Key has to be tuple and value needs to be 129.99.
-# Hence we Use Map again to convert our join output so that we can pass it as input to reducebyKey to get revenue for each product. 
+#Hence we Use Map again to convert our join output so that we can pass it as input to reducebyKey to get revenue for each product. 
 
 ordersJoinMap = ordersJoin.map(lambda o: ((o[1][0], o[1][1][0]), o[1][1][1]))
 for i in ordersJoinMap.take(10): print(i)
 
+... 
+(('2013-07-25 00:00:00.0', 897), 49.98)
+(('2013-07-25 00:00:00.0', 365), 299.95)
+...
+
+from operator import add
 dailyRevenuePerProductId = ordersJoinMap.reduceByKey(add)
 for i in dailyRevenuePerProductId.take(10): print(i)
+
+... 
+(('2013-07-25 00:00:00.0', 191), 5099.489999999999)
+(('2013-07-25 00:00:00.0', 403), 1949.8500000000001)
+(('2013-07-25 00:00:00.0', 627), 1079.73)
+
+
+@Solution 
+7. Load products from local file system and convert into RDD
+105 #48 Apache Spark Core APIs - Get daily revenue per product - Load Products
 
 #Now, get product name instead of product ID. 
 #Load data for products into RDD to get the product name. 
@@ -2187,29 +2680,73 @@ productsRaw = open("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/p
 products = sc.parallelize(productsRaw)
 #Converted to RDD.
 
+>>> for i in products.take(2): print(i)
+... 
+1,2,Quest Q64 10 FT. x 10 FT. Slant Leg Instant U,,59.98,http://images.acmesports.sports/Quest+Q64+10+FT.+x+10+FT.+Slant+Leg+Instant+Up+Canopy
+2,2,Under Armour Men's Highlight MC Football Clea,,129.99,http://images.acmesports.sports/Under+Armour+Men%27s+Highlight+MC+Football+Cleat
+...
 #Define Product ID as Key and Product Name as Value
 #Convert to tuple
 productsMap = products.map(lambda p: (int(p.split(",")[0]), p.split(",")[2]))
 for i in productsMap.take(10): print(i)
-
+... 
+(1, 'Quest Q64 10 FT. x 10 FT. Slant Leg Instant U')
+(2, "Under Armour Men's Highlight MC Football Clea")
+...
 #productID as Key and Name Value 
 dailyRevenuePerProductIdMap = dailyRevenuePerProductId.map(lambda r: (r[0][1], (r[0][0], r[1])))
 for i in dailyRevenuePerProductIdMap.take(10): print(i)
+
+Product ID, (date and Revenue)
+(191, ('2013-07-25 00:00:00.0', 5099.489999999999))
+(403, ('2013-07-25 00:00:00.0', 1949.8500000000001))
+(627, ('2013-07-25 00:00:00.0', 1079.73))
+
+@Solution 
+8. Join daily revenue per product id with products to get daily revenue per product (by name)
+106 #49 Apache Spark Core APIs - Get daily revenue per product - Join and sort data
 
 #Product ID as Key and Rest of the data as value.
 dailyRevenuePerProductJoin = dailyRevenuePerProductIdMap.join(productsMap)
 for i in dailyRevenuePerProductJoin.take(10): print(i)
 
+... 
+(792, (('2013-07-26 00:00:00.0', 89.94), "Hirzl Men's Hybrid Golf Glove"))      
+(792, (('2013-08-25 00:00:00.0', 74.95), "Hirzl Men's Hybrid Golf Glove"))
+(792, (('2013-09-19 00:00:00.0', 44.97), "Hirzl Men's Hybrid Golf Glove"))
+...
+
+@Solution
+9. Sort the data by date in ascending order and by daily revenue per product in descending order 
+10. Get data to desired format - order_Date, daily_revenue_per_product, product_name
+ASC order by date and DESC order by revenue. 
 #Ascending orderby date and decending orderby revenue for that key has to be composite. 
+Output has to be date, revenue and product name. 
 
 dailyRevenuePerProduct = dailyRevenuePerProductJoin.map(lambda t: ((t[1][0][0], -t[1][0][1]), t[1][0][0] + "," + str(t[1][0][1]) + "," + t[1][1]))
 for i in dailyRevenuePerProduct.take(10): print(i)
-
+... 
+(('2013-07-26 00:00:00.0', -89.94), "2013-07-26 00:00:00.0,89.94,Hirzl Men's Hybrid Golf Glove")
+(('2013-08-25 00:00:00.0', -74.95), "2013-08-25 00:00:00.0,74.95,Hirzl Men's Hybrid Golf Glove")
+...
 dailyRevenuePerProductSorted = dailyRevenuePerProduct.sortByKey()
 for i in dailyRevenuePerProductSorted.take(10): print(i)
+... 
+(('2013-07-25 00:00:00.0', -5599.72), '2013-07-25 00:00:00.0,5599.72,Field & Stream Sportsman 16 Gun Fire Safe')
+(('2013-07-25 00:00:00.0', -5099.489999999999), "2013-07-25 00:00:00.0,5099.489999999999,Nike Men's Free 5.0+ Running Shoe")
+...
+ASC order by Date, DESC order by Revenue 
 
 dailyRevenuePerProductName = dailyRevenuePerProductSorted.map(lambda r: r[1])
 for i in dailyRevenuePerProductName.take(10): print(i)
+... 
+2013-07-25 00:00:00.0,5599.72,Field & Stream Sportsman 16 Gun Fire Safe
+2013-07-25 00:00:00.0,5099.489999999999,Nike Men's Free 5.0+ Running Shoe
+...
+
+@Solution 
+11. Save final output to HDFS in avro file format as well as text file format
+107 #50 Apache Spark Core APIs - Get daily revenue per product - Save as text file
 
 #Save the file into text format 
 dailyRevenuePerProductName.saveAsTextFile("/Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python")
@@ -2217,9 +2754,10 @@ dailyRevenuePerProductName.saveAsTextFile("/Users/srikapardhi/Documents/bigdata/
 #Date Validation by sc.textFile("/Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python/").take(10)
 #Hadoop fs commands are another way to validate.
 hadoop fs -ls /Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python/
-hadoop fs -cat /Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python/ -- Will print all the data 
+hadoop fs -cat /Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python/ -- Will print all the data , so don't use this on too much data. 
 hadoop fs -tail /Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python/part-00000 -- can only be used in text format. if its in spl file format will see various characters.
 
+@Spark coalesce Only required no of files as output. 
 #Problem statemnt says save exactly in two files then use coalesce. 
 dailyRevenuePerProductName.coalesce(2).saveAsTextFile("/Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python")
 
@@ -2227,10 +2765,20 @@ dailyRevenuePerProductName.coalesce(2).saveAsTextFile("/Users/srikapardhi/Docume
 hadoop fs rm -R /Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python/
 Once cleaned up , launch pyspark once again. 
 
-#51 Apache Spark Core APIs - Get daily revenue per product - Save as avro
-#Save data in special format as avro. Convert my data to DF, use APIs on top of DF and save as avro. 
+
+@Solution 
+a. HDFS location - avro format /user/Your_user_id/daily_revenue_avro_python
+108 #51 Apache Spark Core APIs - Get daily revenue per product - Save as avro
+#Save data in special format as avro. Convert data to DF, use APIs on top of DF and save as avro. 
 
 pyspark --master yarn --conf spark.ui.port=12890 --num-executors 2 --executor-memory 512M --packages com.databricks:spark-avro_2.10:2.0.1
+
+Two types:
+1.GroupID : is by packages 
+--packages com.databricks:spark-avro_2.10:2.0.1
+2.Jar file location : is by jars
+--jars <PATH_TO_JAR>
+
 
 #Read orders and OrderItems 
 orders = sc.textFile("/Users/srikapardhi/Documents/bigdata/data-master/retail_db/orders")
@@ -2264,7 +2812,7 @@ for i in ordersJoin.take(10): print(i)
 
 #(24, ('2013-07-25 00:00:00.0', (403, 129.99))) -> (('2013-07-25 00:00:00.0',403), 129.99)
 #For each element in ordersJoin convert/transform- > Key has to be tuple and value needs to be 129.99.
-# Hence we Use Map again to convert our join output so that we can pass it as input to reducebyKey to get revenue for each product. 
+#Hence we Use Map again to convert our join output so that we can pass it as input to reducebyKey to get revenue for each product. 
 
 ordersJoinMap = ordersJoin.map(lambda o: ((o[1][0], o[1][1][0]), o[1][1][1]))
 for i in ordersJoinMap.take(10): print(i)
@@ -2300,7 +2848,7 @@ for i in dailyRevenuePerProductIdMap.take(10): print(i)
 dailyRevenuePerProductJoin = dailyRevenuePerProductIdMap.join(productsMap)
 
 #Tuples, and not string concatinated 
-dailyRevenuePerProduct = dailyRevenuePerProductJoin.map(lambda t: ((t[1][0][0], -t[1][0][1]), t[1][0][0], round(t[1][0][1]), 2), t[1][1]))
+dailyRevenuePerProduct = dailyRevenuePerProductJoin.map(lambda t: ((t[1][0][0], -t[1][0][1]), (t[1][0][0], round(t[1][0][1]), 2), t[1][1]))
 
 #Create RDD with tuple of 3 elements
 
@@ -2310,24 +2858,39 @@ for i in dailyRevenuePerProductSorted.take(10): print(i)
 dailyRevenuePerProductName = dailyRevenuePerProductSorted.map(lambda r: r[1])
 for i in dailyRevenuePerProductName.take(10): print(i)
 
+#Convert data in tuples to DF. Also reduce no of files using coalesce. 
 dailyRevenuePerProductNameDF =dailyRevenuePerProductName.coalesce(2).toDF(schema=["order_date", "revenue_per_product", "product_name"])
 dailyRevenuePerProductNameDF.show()
 
+@Avro File Saving 
 #Save the file format 
 dailyRevenuePerProductNameDF.save("path", "com.databricks.spark.avro")
 
 #Validate 
 sqlcontext.load("path", "com.databricks.spark.avro").show()
 
+com.databricks.spark.avro - information will be passed to you if required. 
+--Notes: Check the Result only for this module once. Some error throwing. 
+
+@Solution 
+b. HDFS location - text format /user/Your_user_id/daily_revenue_txt_python
+12. Copy both from HDFS to local file system
+/home/Your_user_id/daily_revenue_python 
+109 #52 Apache Spark Core APIs - Get daily revenue per product - Copy files to local
+
 #Copy both from HDFS to local system. 
 mkdir -p /home/Srikapardhi/daily_revenue_txt_python
 cd daily_revenue_txt_python/
 hadoop fs -help get -- two arguments - source target 
 hadoop fs -get "File copy path" "Destination directort/."
+
+/. - dir will be copied to location (Dest) with the same name. 
+
 validate by typing in hadoop ls -ltr 
+ls -ltr daily_revenue_txt_python/
 
-
-#53 Apache Spark Core APIs - Get daily revenue per product - Develop as application
+@Spark Solution Develop an application 
+110 #53 Apache Spark Core APIs - Get daily revenue per product - Develop as application
 mkdir pythondemo
 cd pythondemo/
 mkdir retail
@@ -2337,6 +2900,8 @@ cd src/main/python
 vi DailyRevenuePerProduct.py 
 
 
+from pyspark import SparkConf, SparkContext
+
 conf = SparkConf().setAppName("Daily Revenue Per Product").setMaster("yarn-client")
 # We are running in yarn client mode. Config object is created.
 sc = SparkContext(conf=conf) 
@@ -2344,16 +2909,51 @@ sc = SparkContext(conf=conf)
 
 #Development is done on local machine, we need to run ans ship it to cluster. 
 
+@Spark Solution Run using spark-submit 
+111 #54 Apache Spark Core APIs - Get daily revenue per product - Run using spark-submit
 #Go to base directory of project and run spark submit.
+
 cd retail
 spark-submit --master yarn --conf spark.ui.port=12789 --num executors 2 --executor-memory 512M src/main/python/dailyRevenuePerProduct.py 
 
-#take - used to validate of data is not of text file format when we validate it. 
-#Test , validate, ship to cluster. Shell script is scheduled using cron or any other scheduling tool.
+hadoop fs -tail /path/ 
 
-#Spark SQL 
-#02 Spark SQL - Different Interfaces
+#take - used to validate data, if the data is not of text file format when we submit the program to validate it. 
+#Test , validate, ship it to the cluster for deployment. Shell script is scheduled using cron or any other scheduling tool.
+
+@Spark SQL 
+112 #01 Spark SQL - Pyspark - Introduction
+1. Objectives 
+2. Problem Statement
+3. Create Database and tables - Text File Format 
+4. Create Database and tables - ORC File Format 
+5. Running Hive Queries 
+6. Spark SQL Application - Hive or SQL Context 
+7. Spark SQL Application - DataFrame Operations 
+
+Data Model: retail_db
+orders and order_items are Transactional Tables. 
+Customers - Master 
+
+Problem Statement: 
+1: 
+a. create ORDERS and ORDER_ITEMS tables in hive database YOUR_USER_ID_retail_db_txt in text file format. load data into tables. 
+b. create ORDERS and ORDER_ITEMS tables in hive database YOUR_USER_ID_retail_db_orc in text orc format and insert load data into tables. 
+c. Get daily revenue by considering completed and closed orders. 
+d. Data need to be sorted by ascending order by date and then descending order by revenue computed for each product for each day. 
+e. Use hive and store the output to hive database YOUR_USER_ID_daily_revenue
+
+2. Data for orders and order_items is available in hive database YOUR_USER_ID_retail_db_txt
+3. Data for products is available locally under /data/retail_db/products.
+Create DataFrame and Join with other 2 tables
+4. Solution need to be stored under 
+/home/YOUR_USER_ID/daily_revenue_python_sql.txt 
+
+
+@Spark SQL Different Interfaces Available 
+113 #02 Spark SQL - Different Interfaces
 # show databases;
+
 
 
 #03 Spark SQL - Create Hive Tables - Text File Format
@@ -2386,6 +2986,8 @@ join
 And more
 
 
+
+@Spark Streaming Analytics 
 CCA 175 - Data Ingestion 
 Streaming Analytics using Flume, Kafka and Spark Streaming using python.
 
