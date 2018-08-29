@@ -2237,37 +2237,9 @@ allproducts.count()
 allproducts = products201312.union(products201401).distinct()
 #This how we can Perform Union operations on two identical data sets. 
 
-@Spark Run using spark submit 
-111 #54 Apache Spark Core APIs - Get daily revenue per product - Run using spark-submit
-
-@Spark SQL 
-112 #01 Spark SQL - Pyspark - Introduction
-
-@Spark DF Operations 
-133 #22 Spark SQL - Data Frame Operations
-
-@Streaming Analytics using Flume Kafka and Spark Streaming 
-134 #01 Streaming Analytics - Introduction
-Spark Streaming alternatives at times - Flink, Storm 
-Flink and Storm not a part of certification.
-
-@Flume Different implementations of agents 
-142 #09 Streaming Analytics - Flume - Different implementations of agents
-
-@Kafka High level architecture 
-143 #10 Streaming Analytics - Kafka - High level architecture
-
-@Spark Streaming 
-147 #14 Spark Streaming - Getting Started
-
-@Kafka and Spark Streaming 
-161 #30 Kafka and Spark Streaming - Department Wise Count - Run and validate application
-
-@End of CCA175 relevant topics. 
-
 
 @Spark intersect and minus/subtract
-#39 Apache Spark Core APIs - Set Operations - intersect and minus/subtract
+96 #39 Apache Spark Core APIs - Set Operations - intersect and minus/subtract
 #This operation is nothing but intersection. 
 
 #Set operations - Intersection - Get product ids sold in both 2013-12 and 2014-01
@@ -2354,7 +2326,7 @@ revenuePerOrderId.saveAsTextFile("/Users/srikapardhi/Documents/bigdata/BdProject
 #java.lang.RuntimeException: native snappy library not available: this version of libhadoop was built without snappy support. 
 #Exception will be thrown as there is no hadoop installed.Else file will be saved and we can access the file using sc.textFile. 
 
-@Spark 
+@Spark Saving data in different file formats Json
 99 #42 Apache Spark Core APIs - Saving data in different file formats - overview using json
 Supported file formats: out of the box 
 orc 
@@ -2366,7 +2338,7 @@ avro(with databricks plugin) : Third party plugin
 Steps to save into different file formats 
 1. Makesure data is represented as Data Frame 
 2. Use write or save API to save Data Frame into different file formats
-3. Use compression algoritm if required 
+3. Use compression algorithm if required 
 
 #3rd party plugin from databricks for avro format. Supported file formats. orc,json,parquet,avro. Make sure RDD is convered to DF(Data frame)
 #Saving as JSON - Get revenue per order id
@@ -2407,7 +2379,7 @@ Solution:
 a. HDFS location - avro format /user/Your_user_id/daily_revenue_avro_python
 b. HDFS location - text format /user/Your_user_id/daily_revenue_txt_python
 12. Copy both from HDFS to local file system
-/home/Your_user_id/daily_revenue_python 
+    /home/Your_user_id/daily_revenue_python 
 
 
 #Solution:
@@ -2423,7 +2395,7 @@ V Cores Total :
 Capacity of cluster: 
 
 Validate Sizes of the data : 
-du - disk usage
+du = disk usage
 du /data/retail_db/products 
 du -s -h /data/retail_db/products 
 
@@ -2443,13 +2415,13 @@ pyspark --master yarn --conf spark.ui.port=12569 --num-executors 2 --executor-me
 
 #Notes 
 --conf spark.ui.port=12569 //Not required in certification unless you work in a multi tenant environment. 
--- number of executors
--- executor memory
--- driver memory 
--- packages
--- jars
--- confs 
--- class 
+--number of executors
+--executor memory
+--driver memory 
+--packages
+--jars
+--confs 
+--class 
 
 #Resource Manager IP address: 8088 IP 
 cd /etc/hadoop/conf 
@@ -2563,7 +2535,7 @@ ordersFiltered.count()
 17,2013-07-25 00:00:00.0,2667,COMPLETE
 18,2013-07-25 00:00:00.0,1205,CLOSED
 
-@Spark Joiin order and order_items 
+@Spark Join order and order_items 
 103 #46 Apache Spark Core APIs - Get daily revenue per product - join order and order_items
 
 @Solution 
@@ -2757,7 +2729,7 @@ hadoop fs -ls /Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_
 hadoop fs -cat /Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python/ -- Will print all the data , so don't use this on too much data. 
 hadoop fs -tail /Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python/part-00000 -- can only be used in text format. if its in spl file format will see various characters.
 
-@Spark coalesce Only required no of files as output. 
+@Spark coalesce Only required No. of files as output. 
 #Problem statemnt says save exactly in two files then use coalesce. 
 dailyRevenuePerProductName.coalesce(2).saveAsTextFile("/Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_txt_python")
 
@@ -2766,7 +2738,7 @@ hadoop fs rm -R /Users/srikapardhi/Documents/bigdata/BdProjects/daily_revenue_tx
 Once cleaned up , launch pyspark once again. 
 
 
-@Solution 
+@Solution AVRO File Format 
 a. HDFS location - avro format /user/Your_user_id/daily_revenue_avro_python
 108 #51 Apache Spark Core APIs - Get daily revenue per product - Save as avro
 #Save data in special format as avro. Convert data to DF, use APIs on top of DF and save as avro. 
@@ -2872,7 +2844,7 @@ sqlcontext.load("path", "com.databricks.spark.avro").show()
 com.databricks.spark.avro - information will be passed to you if required. 
 --Notes: Check the Result only for this module once. Some error throwing. 
 
-@Solution 
+@Solution Copy from HDFS to local file System 
 b. HDFS location - text format /user/Your_user_id/daily_revenue_txt_python
 12. Copy both from HDFS to local file system
 /home/Your_user_id/daily_revenue_python 
@@ -2906,8 +2878,8 @@ conf = SparkConf().setAppName("Daily Revenue Per Product").setMaster("yarn-clien
 # We are running in yarn client mode. Config object is created.
 sc = SparkContext(conf=conf) 
 #Code here - same as above
-
 #Development is done on local machine, we need to run ans ship it to cluster. 
+
 
 @Spark Solution Run using spark-submit 
 111 #54 Apache Spark Core APIs - Get daily revenue per product - Run using spark-submit
@@ -2921,7 +2893,7 @@ hadoop fs -tail /path/
 #take - used to validate data, if the data is not of text file format when we submit the program to validate it. 
 #Test , validate, ship it to the cluster for deployment. Shell script is scheduled using cron or any other scheduling tool.
 
-@Spark SQL 
+@SparkSQL 
 112 #01 Spark SQL - Pyspark - Introduction
 1. Objectives 
 2. Problem Statement
@@ -2950,13 +2922,21 @@ Create DataFrame and Join with other 2 tables
 /home/YOUR_USER_ID/daily_revenue_python_sql.txt 
 
 
-@Spark SQL Different Interfaces Available 
+@SparkSQL Different Interfaces Available 
 113 #02 Spark SQL - Different Interfaces
-# show databases;
+show databases;
+
+HiveContext, SQLContext are almost same. 
+Hive : MapReduce framework
+SparkSQL : Spark framework
+
+Metadata is called hive metastore. Internally, all engine components use hive metastore. Syntax, check, validations use same components which are part of hive metastore. 
+Learning in hive, will be useful for sparksql, impala, Tez. 
 
 
+@SparkSQL - Create Hive Tables - Text File Format 
+114 #03 Spark SQL - Create Hive Tables - Text File Format
 
-#03 Spark SQL - Create Hive Tables - Text File Format
 
 
 //14 Spark SQL - Sorting
@@ -2976,7 +2956,8 @@ Hive language Manul
 //17 Spark SQL - Analytics Functions - ranking
 
 
-//22 Spark SQL - Data Frame Operations
+@Spark DF Operations
+133  # 22 Spark SQL - Data Frame Operations
 
 Data Frame Operations:
 show
