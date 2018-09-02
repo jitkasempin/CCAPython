@@ -1177,7 +1177,7 @@ sqoop export \
 --connect jdbc:mysql://ms.itversity.com:3306/retail_export \
 --username retail_user \
 --password itversity \
---export-dir / apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
+--export-dir /apps/hive/warehouse/srikapardhi_sqoop_import.db/daily_revenue \
 --table daily_revenue \
 --input-fields-terminated-by "\001"
 --num-mappers 1
