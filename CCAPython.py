@@ -2922,6 +2922,11 @@ Create DataFrame and Join with other 2 tables
 /home/YOUR_USER_ID/daily_revenue_python_sql.txt 
 
 
+Cloudera Path: 
+Properties : Similar approach for 
+hbase : /etc/hbase/conf
+hive : /etc/hive/conf
+
 @SparkSQL Different Interfaces Available 
 113 #02 Spark SQL - Different Interfaces
 show databases;
