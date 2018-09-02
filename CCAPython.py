@@ -2936,16 +2936,918 @@ Learning in hive, will be useful for sparksql, impala, Tez.
 
 @SparkSQL - Create Hive Tables - Text File Format 
 114 #03 Spark SQL - Create Hive Tables - Text File Format
+114 : 03 Spark SQL Create Hive Tables 
+
+[cloudera@quickstart ~]$ hive
+
+Logging initialized using configuration in file:/etc/hive/conf.dist/hive-log4j.properties
+WARNING: Hive CLI is deprecated and migration to Beeline is recommended.
+hive> create srikapardhi_retail_db_txt; 
+
+hive> show databases;
+OK
+default
+srikapardhi_retail_db_orc
+srikapardhi_retail_db_txt
+Time taken: 1.61 seconds, Fetched: 3 row(s)
+hive> 
+
+
+hive> set hive.metastore.warehouse.dir;
+hive.metastore.warehouse.dir=/user/hive/warehouse
+
+All the hive tables are stored in this metastore in HDFS storage place. 
 
 
 
-//14 Spark SQL - Sorting
+hive> dfs -ls /user/hive/warehouse
+    > ;
+Found 4 items
+drwxrwxrwx   - cloudera supergroup          0 2018-08-20 04:39 /user/hive/warehouse/srikapardhi_daily_revenue.db
+drwxrwxrwx   - cloudera supergroup          0 2018-08-13 10:24 /user/hive/warehouse/srikapardhi_retail_db_orc.db
+drwxrwxrwx   - cloudera supergroup          0 2018-08-13 10:12 /user/hive/warehouse/srikapardhi_retail_db_txt.db
+drwxrwxrwx   - cloudera supergroup          0 2018-08-22 05:36 /user/hive/warehouse/test
+hive> 
 
-//15 Spark SQL - Set Operations
 
-Set operations are not very important. 
+This is how hive stores, db data in HDFS. 
 
-//16 Spark SQL - Analytics Functions - aggregations
+
+-- 
+Create Tables:
+check delimiters and file type for data files.
+
+hive> create table orders (order_id int, order_date string, order_customer_id string, order_status string)
+
+
+No primary keys, indexes in hive. Even if they exist they are only for informational purposes. Even if they exist they are not much reliable in hive. 
+
+Now, we need to define delimiters.
+
+create table orders (order_id int, order_date string, order_customer_id string, order_status string) row format delimited fields terminated by ',' 
+stored as textfile;
+
+even if you don't specify it will store the table as textfile by default.
+
+
+Official Documentation: 
+
+Hive Language Manual. 
+DDL Statements
+Create Table
+
+into : If your requirement is to insert or append to data. 
+load data local inpath 'data/retail_db/orders' into table orders; 
+
+overwrite : Delete old data and insert data everytime. 
+load data local inpath 'data/retail_db/orders' overwrite into table orders; 
+
+
+dfs -ls /user/hive/warehouse
+
+create table order_items (
+	order_item_id int,
+	order_item_order_id int,
+	order_item_product_id int,
+	order_item_quantity int,
+	order_item_subtotal float,
+	order_item_product_price float,
+	) row format delimited fields terminated by ','
+stored as textfile;
+
+drop table order_items; 
+
+load data local inpath 'data/retail_db/orders_items' into table order_items 
+
+
+@SparkSQL Create Hive Tables ORC File Format 
+115 #04 Spark SQL - Create Hive Tables - ORC File Format 
+
+create database srikapardhi_retail_db_orc;
+use srikapardhi_retail_db_orc;
+
+Reference : Hive Language Reference:
+Except for text file, most of the other formats store data along with metastore and data.  RCFile is outdated. It is being replaced with ORC Fileformat. 
+
+
+stored as is mandatory for any format except text file.
+
+
+create table orders (
+	order_id int, 
+	order_date string, 
+	order_customer_id string, 
+	order_status string
+) stored as orc;
+
+create table order_items (
+	order_item_id int,
+	order_item_order_id int,
+	order_item_product_id int,
+	order_item_quantity int,
+	order_item_subtotal float,
+	order_item_product_price float,
+) stored as orc;
+
+
+hive> select * from order_items limit 10;
+OK
+1	1	957	1	299.98	299.98
+2	2	1073	1	199.99	199.99
+3	2	502	5	250.0	50.0
+4	2	403	1	129.99	129.99
+5	4	897	2	49.98	24.99
+6	4	365	5	299.95	59.99
+7	4	502	3	150.0	50.0
+8	4	1014	4	199.92	49.98
+9	5	957	1	299.98	299.98
+10	5	365	5	299.95	59.99
+Time taken: 0.268 seconds, Fetched: 10 row(s)
+hive> select * from orders limit 10;
+OK
+1	2013-07-25 00:00:00.0	11599	CLOSED
+2	2013-07-25 00:00:00.0	256	PENDING_PAYMENT
+3	2013-07-25 00:00:00.0	12111	COMPLETE
+4	2013-07-25 00:00:00.0	8827	CLOSED
+5	2013-07-25 00:00:00.0	11318	COMPLETE
+6	2013-07-25 00:00:00.0	7130	COMPLETE
+7	2013-07-25 00:00:00.0	4530	COMPLETE
+8	2013-07-25 00:00:00.0	2911	PROCESSING
+9	2013-07-25 00:00:00.0	5657	PENDING_PAYMENT
+10	2013-07-25 00:00:00.0	5648	PENDING_PAYMENT
+Time taken: 0.231 seconds, Fetched: 10 row(s)
+hive> describe orders;
+OK
+order_id            	int                 	                    
+order_date          	string              	                    
+order_customer_id   	int                 	                    
+order_status        	string              	                    
+Time taken: 0.362 seconds, Fetched: 4 row(s)
+hive> describe order_items 
+    > ;
+OK
+order_item_id       	int                 	                    
+order_item_order_id 	int                 	                    
+order_item_product_id	int                 	                    
+order_item_quantity 	int                 	                    
+order_item_subtotal 	float               	                    
+order_item_product_price	float               	                    
+Time taken: 0.237 seconds, Fetched: 6 row(s)
+hive> describe formatted orders;
+OK
+# col_name            	data_type           	comment             
+	 	 
+order_id            	int                 	                    
+order_date          	string              	                    
+order_customer_id   	int                 	                    
+order_status        	string              	                    
+	 	 
+# Detailed Table Information	 	 
+Database:           	srikapardhi_retail_db_orc	 
+Owner:              	cloudera            	 
+CreateTime:         	Mon Aug 13 10:23:02 PDT 2018	 
+LastAccessTime:     	UNKNOWN             	 
+Protect Mode:       	None                	 
+Retention:          	0                   	 
+Location:           	hdfs://quickstart.cloudera:8020/user/hive/warehouse/srikapardhi_retail_db_orc.db/orders	 
+Table Type:         	MANAGED_TABLE       	 
+Table Parameters:	 	 
+	COLUMN_STATS_ACCURATE	true                
+	numFiles            	1                   
+	numRows             	68883               
+	rawDataSize         	14189898            
+	totalSize           	163094              
+	transient_lastDdlTime	1534181423          
+	 	 
+# Storage Information	 	 
+SerDe Library:      	org.apache.hadoop.hive.ql.io.orc.OrcSerde	 
+InputFormat:        	org.apache.hadoop.hive.ql.io.orc.OrcInputFormat	 
+OutputFormat:       	org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat	 
+Compressed:         	No                  	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
+Storage Desc Params:	 	 
+	field.delim         	,                   
+	serialization.format	,                   
+Time taken: 0.55 seconds, Fetched: 35 row(s)
+hive> dfs -ls hdfs://quickstart.cloudera:8020/user/hive/warehouse/srikapardhi_retail_db_orc.db/orders
+    > ;
+Found 1 items
+-rwxrwxrwx   1 cloudera supergroup     163094 2018-08-13 10:30 hdfs://quickstart.cloudera:8020/user/hive/warehouse/srikapardhi_retail_db_orc.db/orders/000000_0
+hive> 
+
+
+@SerDe Name/Library 
+
+Serialization / Deserialization 
+
+serde information will be inherited based on the input format. 
+
+Incase they gave a custom input format, you have to make sure that you use
+
+rowformat serde and give serde name.
+
+input format class name 
+output format class name 
+
+
+
+Our table is created with orc file format, 
+now input data is of type text with , delimiter.
+
+If we have to load any data from file which doesn't match with table then its a two stage process.
+
+then we need to use staging tables and insert command. 
+
+insert into table orders select * from srikapardhi_retail_db_txt.orders; 
+
+This will automatically, take data from txt format table,
+do necessary changes and transformations and save it to avro format table.
+
+
+hive it will run in hive context or map reduce context.
+in spark it will run in spark conext as execution framework. 
+
+orc file format is one of the binary file formats. 
+
+dfs -ls hds url of the file. 
+
+select * from orders limit 10;
+select * from order_items limit 10;
+
+
+@SparkSQL  using pyspark
+116 #05 Spark SQL - using pyspark 
+
+HiveContext is available as sqlContext. 
+
+So, you can actually use this one to submit queries in hive context. 
+use the tables and Data which are actually created in hive databases, and then do required processing using sparksql under python as programming language. 
+
+
+sqlContext.sql("use srikapardhi_retail_db_txt")
+
+Even though we are learning hive, the same things can be easily leveraged using pyspark. 
+
+sqlContext.sql("show tables").show()
+
+whatever results sqlcontext it gets, we need to use the word shsow() to display the details.
+
+sqlContext.sql("describe formatted orders").collect()
+
+
+for i in sqlContext.sql("describe formatted orders").collect(): print(i)
+
+ 
+sqlContext.sql("select * from orders limit 10").show()
+
+From here, you can integrate queries as a part of application and begin working with the data in the application. 
+
+
+
+Running Hive Queries:
+
+1. Filtering (horizontal and vertical)
+2. Functions
+3. Row level transformations
+4. Joins
+5. Aggregation
+6. Sorting
+7. Set Operations
+8. Analytical Functions
+9. Windowing Functions 
+
+
+
+@SparkSQL Functions
+117 #06 Spark SQL - Functions - Getting Started
+1. Filtering (horizontal and vertical)
+2. Functions
+
+Most of the functions are inline with oracle, mysql etc. 
+Aggregate functions : count,sum,avg etc. 
+String Functions : take a string do some transformation.
+
+describe function length; 
+| means or. 
+
+hive> select length('srikapardhi');
+OK
+11
+Time taken: 0.867 seconds, Fetched: 1 row(s)
+hive> 
+
+
+Time taken: 0.413 seconds, Fetched: 100 row(s)
+hive> select length(order_status) from orders limit 5;
+OK
+6
+15
+8
+6
+8
+Time taken: 0.144 seconds, Fetched: 5 row(s)
+hive> select order_status, length(order_status) from orders limit 5;
+OK
+CLOSED	6
+PENDING_PAYMENT	15
+COMPLETE	8
+CLOSED	6
+COMPLETE	8
+Time taken: 0.247 seconds, Fetched: 5 row(s)
+hive> 
+
+
+---
+Functions covered: 
+Aggregate
+String
+Date 
+---
+
+
+118 #07 Spark SQL - Functions - Manipulating Strings 
+Filtering (horizontal and vertical)
+Functions
+
+show functions;
+
+Some of the string functions;
+substr or substring
+instr
+like
+rlike
+length
+lcase or lower
+ucase or upper 
+trim, ltrim, rtrim, 
+cast
+lpad, rpad
+split
+
+hive> select substr('srikapardhi, how are you', 14);
+OK
+how are you
+Time taken: 0.261 seconds, Fetched: 1 row(s)
+hive> select substr('srikapardhi, how are you', 14, 16);
+OK
+how are you
+Time taken: 0.212 seconds, Fetched: 1 row(s)
+hive> select substr('srikapardhi, how are you', 14,3);
+OK
+how
+Time taken: 0.231 seconds, Fetched: 1 row(s)
+hive> select substr('srikapardhi, how are you', -11);
+OK
+how are you
+
+
+hive> select instr('srikapardhi, how are you', ' ');
+OK
+13
+Time taken: 0.298 seconds, Fetched: 1 row(s)
+hive> select instr('srikapardhi, how are you', 'how');
+OK
+14
+Time taken: 0.313 seconds, Fetched: 1 row(s)
+hive> 
+
+describe function like;
+OK
+like(str, pattern) - Checks if str matches pattern
+Time taken: 0.023 seconds, Fetched: 1 row(s)
+
+
+hive> select "Hello World, How are you" like 'Hello';
+OK
+false
+Time taken: 0.236 seconds, Fetched: 1 row(s)
+hive> select "Hello World, How are you" like 'Hello%';
+OK
+true
+Time taken: 0.187 seconds, Fetched: 1 row(s)
+hive> select "Hello World, How are you" like '%Hello';
+OK
+false
+Time taken: 0.214 seconds, Fetched: 1 row(s)
+hive> select "Hello World, How are you" like '%Hello%';
+OK
+true
+Time taken: 0.225 seconds, Fetched: 1 row(s)
+hive> 
+
+
+hive> select length("Hello World, How are you");
+OK
+24
+Time taken: 0.607 seconds, Fetched: 1 row(s)
+hive> select lcase("Hello World, How are you");
+OK
+hello world, how are you
+Time taken: 0.246 seconds, Fetched: 1 row(s)
+hive> select ucase("Hello World, How are you");
+OK
+HELLO WORLD, HOW ARE YOU
+Time taken: 0.264 seconds, Fetched: 1 row(s)
+hive> describe function trim;
+OK
+trim(str) - Removes the leading and trailing space characters from str 
+Time taken: 0.049 seconds, Fetched: 1 row(s)
+hive> 
+
+
+hive> select lpad(12, 2, ' ');
+OK
+12
+Time taken: 0.15 seconds, Fetched: 1 row(s)
+hive> select lpad(12, 2, '0');
+OK
+12
+Time taken: 0.513 seconds, Fetched: 1 row(s)
+hive> select lpad(2, 12, '0');
+OK
+000000000002
+Time taken: 0.148 seconds, Fetched: 1 row(s)
+hive> select lpad(12, 12, '0');
+OK
+000000000012
+Time taken: 0.508 seconds, Fetched: 1 row(s)
+hive> 
+
+hive> select "12";
+OK
+12
+Time taken: 0.149 seconds, Fetched: 1 row(s)
+hive> select cast("12" as int);
+OK
+12
+Time taken: 0.293 seconds, Fetched: 1 row(s)
+hive> describe orders; 
+OK
+order_id            	int                 	                    
+order_date          	string              	                    
+order_customer_id   	int                 	                    
+order_status        	string              	                    
+Time taken: 0.23 seconds, Fetched: 4 row(s)
+hive> select * order_date from orders limit 10;
+FAILED: ParseException line 1:9 missing EOF at 'order_date' near '*'
+hive> select order_date from orders limit 10;
+OK
+2013-07-25 00:00:00.0
+2013-07-25 00:00:00.0
+2013-07-25 00:00:00.0
+2013-07-25 00:00:00.0
+2013-07-25 00:00:00.0
+2013-07-25 00:00:00.0
+2013-07-25 00:00:00.0
+2013-07-25 00:00:00.0
+2013-07-25 00:00:00.0
+2013-07-25 00:00:00.0
+Time taken: 0.421 seconds, Fetched: 10 row(s)
+hive> select substr(order_date, 6, 2) from orders limit 10;
+OK
+07
+07
+07
+07
+07
+07
+07
+07
+07
+07
+Time taken: 0.369 seconds, Fetched: 10 row(s)
+hive> select cast(substr(order_date, 6, 2) as int) from orders limit 10;
+OK
+7
+7
+7
+7
+7
+7
+7
+7
+7
+7
+Time taken: 0.305 seconds, Fetched: 10 row(s)
+hive> select cast("hello" as int);
+OK
+NULL
+Time taken: 0.184 seconds, Fetched: 1 row(s)
+hive> select split("hello world, how are you", ' ');
+OK
+["hello","world,","how","are","you"]
+Time taken: 0.553 seconds, Fetched: 1 row(s)
+hive> select index(split("hello world, how are you", ' '), 4);
+OK
+you
+Time taken: 0.177 seconds, Fetched: 1 row(s)
+hive> select index(split("hello world, how are you", ' '), 0);
+OK
+hello
+Time taken: 0.164 seconds, Fetched: 1 row(s)
+hive> 
+
+@SparkSQL Functions Manipulating Dates 
+119 #08 Spark SQL - Functions - Manipulating Dates 
+
+current_date 
+current_timestamp
+date_add
+date_format
+date_sub
+datediff
+day
+dayofmonth
+to_date
+to_unix_timestamp
+to_utc_timestamp
+from_unixtime
+from_utc_timestamp
+minute
+month
+months_between
+next_day
+
+concat
+--
+
+
+case - if(condition) 'x' else if (condition) 'y' else 'z'
+nvl - 
+
+
+
+
+hive> select current_date;
+OK
+2018-08-29
+Time taken: 0.222 seconds, Fetched: 1 row(s)
+hive> select current_timestamp;
+OK
+2018-08-29 23:50:25.46
+Time taken: 0.251 seconds, Fetched: 1 row(s)
+hive> select date_format(current_date, 'y');
+OK
+2018
+Time taken: 0.144 seconds, Fetched: 1 row(s)
+hive> select date_format(current_date, 'd');
+OK
+29
+Time taken: 0.118 seconds, Fetched: 1 row(s)
+hive> select date_format(current_date, 'D');
+OK
+241
+Time taken: 0.138 seconds, Fetched: 1 row(s)
+hive> 
+
+Where to get the details?
+Hive Language Manual
+Operators and User Defined Functions
+Date Functions
+
+It will redirect to java documentation. 
+
+
+
+hive> select day(current_date);
+OK
+29
+Time taken: 0.215 seconds, Fetched: 1 row(s)
+hive> select dayofmonth(current_date);
+OK
+29
+Time taken: 0.307 seconds, Fetched: 1 row(s)
+hive> select day('2018-10-09');
+OK
+9
+Time taken: 0.186 seconds, Fetched: 1 row(s)
+hive> describe function day;
+OK
+day(date) - Returns the date of the month of date
+Time taken: 0.032 seconds, Fetched: 1 row(s)
+hive> describe function dayofmonth;
+OK
+dayofmonth(date) - Returns the date of the month of date
+Time taken: 0.029 seconds, Fetched: 1 row(s)
+hive> 
+
+hive> select to_unix_timestamp(current_date);
+OK
+1535612400
+Time taken: 0.153 seconds, Fetched: 1 row(s)
+
+
+
+hive> select to_unix_timestamp(current_timestamp);
+OK
+1535615982
+Time taken: 0.116 seconds, Fetched: 1 row(s)
+hive> select to_unix_timestamp(current_date);
+OK
+1535612400
+Time taken: 0.143 seconds, Fetched: 1 row(s)
+hive> select from_unixtime(1535615982);
+OK
+2018-08-30 00:59:42
+Time taken: 0.145 seconds, Fetched: 1 row(s)
+hive> select to_date(from_unixtime(1535615982));
+OK
+2018-08-30
+Time taken: 0.149 seconds, Fetched: 1 row(s)
+hive> 
+
+
+select * from orders limit 10; 
+
+
+date is also represented as string in hive. There is date datatype.
+but it is for informational only.
+
+hive> select to_date(order_date) from orders limit 10;
+OK
+2013-07-25
+2013-07-25
+2013-07-25
+2013-07-25
+2013-07-25
+2013-07-25
+2013-07-25
+2013-07-25
+2013-07-25
+2013-07-25
+Time taken: 0.164 seconds, Fetched: 10 row(s)
+hive> select date_add(order_date, 10) from orders limit 10;
+OK
+2013-08-04
+2013-08-04
+2013-08-04
+2013-08-04
+2013-08-04
+2013-08-04
+2013-08-04
+2013-08-04
+2013-08-04
+2013-08-04
+Time taken: 0.162 seconds, Fetched: 10 row(s)
+
+120 #09 SparkSQL - Functions - Aggregate Functions 
+
+hive> select count(*) from orders;
+Query ID = cloudera_20180830011010_9d46e713-3e7c-4582-a0fc-6d20d6dd3253
+Total jobs = 1
+Total MapReduce CPU Time Spent: 6 seconds 790 msec
+OK
+68883
+
+
+select sum(order_item_subtotal) from order_items;
+
+typically we don't do sum on entire table.We do it on a dimension. 
+
+Aggregate functions take multiple records as input and return 1 function as output.
+
+Where as regular fun take 1 record as input another record as output.
+
+Complete dataset is a group, hence you cannot have other fields walong with it. 
+select count(1), order_status from orders; 
+this goes wrong. 
+
+select count(1), count(distinct order_status) from orders; 
+
+this is valid coz both are similar in functionality. It will give number of orders and distinct number of order status. 
+
+> Aggregation, will come back later. There is a sub topic on aggregation itself. 
+
+hive> select count(1), count(distinct order_status) from orders;
+
+Query ID = cloudera_20180830011515_b839c3dc-0975-47c6-9c62-935c289eeba7
+Total jobs = 1
+
+121 #10 SparkSQL - Function CASE 
+
+NVL 
+CASE 
+
+We can use together. 
+
+in sql we don't have if condition. 
+
+
+describe function case;
+OK
+CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - When a = b, returns c; when a = d, return e; else return f
+Time taken: 0.018 seconds, Fetched: 1 row(s)
+
+
+--
+
+hive> select distinct order_status from orders;
+Query ID = cloudera_20180830011818_cbc54cfa-b7c6-41da-b137-b9ba37ba7d1c
+Total jobs = 1
+Launching Job 1 out of 1
+Number of reduce tasks not specified. Estimated from input data size: 1
+In order to change the average load for a reducer (in bytes):
+  set hive.exec.reducers.bytes.per.reducer=<number>
+In order to limit the maximum number of reducers:
+  set hive.exec.reducers.max=<number>
+In order to set a constant number of reducers:
+  set mapreduce.job.reduces=<number>
+Starting Job = job_1535599562442_0003, Tracking URL = http://quickstart.cloudera:8088/proxy/application_1535599562442_0003/
+Kill Command = /usr/lib/hadoop/bin/hadoop job  -kill job_1535599562442_0003
+Hadoop job information for Stage-1: number of mappers: 1; number of reducers: 1
+2018-08-30 01:18:31,584 Stage-1 map = 0%,  reduce = 0%
+2018-08-30 01:18:46,386 Stage-1 map = 100%,  reduce = 0%, Cumulative CPU 4.59 sec
+2018-08-30 01:19:02,416 Stage-1 map = 100%,  reduce = 100%, Cumulative CPU 8.18 sec
+MapReduce Total cumulative CPU time: 8 seconds 180 msec
+Ended Job = job_1535599562442_0003
+MapReduce Jobs Launched: 
+Stage-Stage-1: Map: 1  Reduce: 1   Cumulative CPU: 8.18 sec   HDFS Read: 53500 HDFS Write: 99 SUCCESS
+Total MapReduce CPU Time Spent: 8 seconds 180 msec
+OK
+CANCELED
+CLOSED
+COMPLETE
+ON_HOLD
+PAYMENT_REVIEW
+PENDING
+PENDING_PAYMENT
+PROCESSING
+SUSPECTED_FRAUD
+Time taken: 47.806 seconds, Fetched: 9 row(s)
+hive> 
+
+
+---
+
+
+select order_status, case when order_status IN ('CLOSED','COMPLETE') then 'No Action' when order_status IN ('ON_HOLD','PAYMENT_REVIEW','PENDING', 'PENDING_PAYMENT', 'PROCESSING') then 'Pending Action' else 'Risky' end from orders limit 10; 
+
+OK
+CLOSED	No Action
+PENDING_PAYMENT	Pending Action
+COMPLETE	No Action
+CLOSED	No Action
+COMPLETE	No Action
+COMPLETE	No Action
+COMPLETE	No Action
+PROCESSING	Pending Action
+PENDING_PAYMENT	Pending Action
+PENDING_PAYMENT	Pending Action
+Time taken: 0.11 seconds, Fetched: 10 row(s)
+
+
+
+You can use like, greater than less than, greater than or equal to. 
+
+NVL - is a special case of function. If you want to use a default value then you use NVL. 
+
+select nvl(order_status, 'Status Missing') from orders limit 100;
+
+Instead of writing a big code than using CASE, we can use NVL. it is inherited from oracle. In other databases it is not present. 
+
+
+hive> select nvl(order_status, 'Status Missing') from orders limit 100;
+OK
+CLOSED
+PENDING_PAYMENT
+COMPLETE
+CLOSED
+
+
+----
+
+@SparkSQL - Row Level Transformations 
+122 #11 SparkSQL - Row Level Transformations 
+
+To pass one record and get a transformed record.
+Typically, we perform row level transformations for data standardization. 
+
+Data Standardization
+Data cleansing 
+Data offscation - only store and show the required information. Example like SSN.
+
+
+
+
+hive> select date_format('2013-07-25 00:00:00.0', 'YYYYMM');
+OK
+201307
+Time taken: 0.258 seconds, Fetched: 1 row(s)
+
+
+hive> select cast(date_format(order_Date, 'YYYYMM') as int) from orders limit 100;
+OK
+201307
+201307
+
+
+@Spark SQL 
+123 #12 Spark SQL - Joining data from multiple tables
+
+orders
+order_items 
+
+select o.*, c.* from orders o, customers c where o.order_customer_id = c.customer_id limit 10; 
+
+
+select o.*, c.* from orders o inner join customers c on o.order_customer_id = c.customer_id  limit 10;
+
+select 0.*, c.* from customers c left outer join orders o on o.order_customer_id = c.customer_id limit 10; 
+
+
+
+select count(1) from orders o inner join customers c on o.order_customer_id = c.customer_id;
+
+
+select count(1) from customers c left outer join orders o on o.order_customer_id = c.customer_id where o.order_customer_id is null;
+
+
+select * from customers c left outer join orders o on o.orders_customer_id = c.customer_id where o.order_customer_id is null; 
+
+
+select * from customers where customer_id not in (select distinct order_customer_id from orders);
+
+
+Performance wise and all IN clause in not efficient. 
+
+left outer join
+right outer join
+full outer join
+
+m by n relationship - full outer join
+
+
+@SparkSQL Aggregations 
+124 #13 Spark SQL - Aggregations 
+
+Aggregations : 
+
+select count(1) from orders; 
+
+select order_status, count(1) from orders as order_count from orders group by order_status;
+
+select order_id, sum(oi.order_item_subtotal) order_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id group by o.order_id; 
+
+
+select order_id, o.order_date, o.order_status, sum(oi.order_item_subtotal) order_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id group by o.order_id, o.order_Date, o.order_status; 
+
+
+
+
+select order_id, o.order_date, o.order_status, sum(oi.order_item_subtotal) order_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id group by o.order_id, o.order_Date, o.order_status having sum(oi.order_item_subtotal) >= 1000; 
+
+
+
+select o.order_date, round(sum(order_item_subtotal), 2) daily_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id where o.order_status in ('COMPLETE', 'CLOSED') group by o.order_date;
+
+#Aggregating at daily level. 
+
+
+SparkSQL Sorting 
+125 #14 SparkSQL - Sorting 
+
+
+order by is typically the last clause in our query. 
+
+select order_id, o.order_date, o.order_status, sum(oi.order_item_subtotal) order_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id group by o.order_id, o.order_Date, o.order_status having sum(oi.order_item_subtotal) >= 1000 order by o.order_date, order_revenue desc; 
+
+
+select order_id, o.order_date, o.order_status, sum(oi.order_item_subtotal) order_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id group by o.order_id, o.order_Date, o.order_status having sum(oi.order_item_subtotal) >= 1000 distribute by o.order_date sort by o.order_date, order_revenue desc;
+
+#within each date it will sort by order date and order revenue. 
+Performance wise this is better. 
+
+
+-- distribute by is used to copy. 
+
+
+data might be sorted randomly but it will ensure that it will sort the data in order within each date. 
+
+
+
+Set Operations 
+126 #15 Spark SQL - Set Operations 
+
+    Set operations are not very important.
+
+Union and 
+Union All
+
+doesn't support intersect or difference 
+
+
+Joins are typically done on two tables and common key;
+
+Where as set operations are done on two datasets which are similar in nature. Unique and uniform elements in a group. 
+
+Hence we have to use only similar datasets to perform set operations. 
+
+select 1, "Hello" union select 2, "World" union select 1, "Hello" union select 1, "world";
+
+@Spark Aggregations
+127 #16 Spark SQL - Analytics Functions - aggregations 
 
 Hive language Manul 
 > Data Retrieval Queries:
@@ -2953,18 +3855,183 @@ Hive language Manul
 2.The OVER clause 
 3.Analytics functions 
 
-//17 Spark SQL - Analytics Functions - ranking
+
+COUNT
+SUM
+MIN
+MAX 
+AVG
+
+Aggregate functions under analytics 
+
+select * from (select o.order_id, o.order_date, o.order_status, oi.order_item_subtotal, round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) order_revenue, oi.order_item_subtotal/round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) pct_revenue, round(avg(oi.order_item_subtotal) over (partition by o.order_id),2) avg_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id where o.order_status in ('COMPLETE', 'CLOSED')) q where order_revenue >= 1000 order by order_date, order_revenue desc;
+
+key called order ID
 
 
-@Spark DF Operations
-133  # 22 Spark SQL - Data Frame Operations
+order_item subtotal / cumulated revenue for the corresponding order. 
 
-Data Frame Operations:
-show
-select
-filter
-join
-And more
+Always the nested query in hive has to be aliased. 
+
+
+You might not be able to use windowing functions with some of the underlying functions. 
+
+
+
+@SparkSQL Ranking 
+128 #17 SparkSQL - Analytics Functions - Ranking
+
+RANK 
+DENSE_RANK
+ROW_NUMBER 
+PERCENT_RANK 
+
+
+Rank : 
+
+order by : field on which the items needs to be sorted. 
+
+rank() over (partition by o.order_id order by oi.order_items_subtotal desc) rnk_revenue, dense_rank() over (partition by o.order_id order by oi.order_items_subtotal desc) dense_rnk_revenue, percent_rank() over (partition by o.order_id order by oi.order_items_subtotal desc) pct_rnk_revenue, row_number() over (partition by o.order_id order by oi.order_items_subtotal desc) rn_orderby_revenue, row_number() over (partition by o.order_id order) rn_revenue,
+
+  
+
+select * from (select o.order_id, o.order_date, o.order_status, oi.order_item_subtotal, 
+round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) order_revenue, 
+oi.order_item_subtotal/round(sum(oi.order_item_subtotal) over (partition by o.order_id), 2) pct_revenue, 
+round(avg(oi.order_item_subtotal) over (partition by o.order_id),2) avg_revenue, rank() over (partition by o.order_id order by oi.order_item_subtotal desc) rnk_revenue, dense_rank() over (partition by o.order_id order by oi.order_item_subtotal desc) dense_rnk_revenue, percent_rank() over (partition by o.order_id order by oi.order_item_subtotal desc) pct_rnk_revenue, row_number() over (partition by o.order_id order by oi.order_item_subtotal desc) rn_orderby_revenue, row_number() over (partition by o.order_id order) rn_revenue from orders o join order_items oi on o.order_id = oi.order_item_order_id 
+where o.order_status in ('COMPLETE', 'CLOSED')) q where order_revenue >= 1000 order by order_date, order_revenue desc, rnk_revenue;
+
+
+
+@SparkSQL Windoing Functions 
+129 #18 Spark SQL - Windowing Functions 
+
+@SparkSQL Create DF and Register Temp Table 
+130 #19 Spark SQL - Create Data Frame and Register Temp Table
+
+what ever results sqlContext gets will be a dataframe. Show API will preview the data. 
+
+sqlContext.sql("select * from srikapardhi_retail_db_orc.orders")
+
+sqlContext.sql("select * from srikapardhi_retail_db_orc.orders").printSchema()
+
+If you to get the data from RDD and if you want to convert to DF. need to import a class called row.
+
+
+from pyspark.sql import Row 
+ordersRDD = sc.textFile("/home/cloudera/Bd/data-master/retail_db/orders")
+
+RDD - doesn't have structure
+DF - Have structure. 
+
+Major difference between the two.
+
+ordersDF = ordersRDD.map(lambda o: Row(int(o.split(",")[0]), order_date=o.split(",")[1], order_customer_id=int(o.split(",")[2]), order_status=o.split(",")[3])).toDF()
+
+
+ordersDF.registerTempTable("ordersDF_table") 
+sqlContext.sql("select * order_status, count(1) from ordersDF_table group by order_status").show()
+
+
+Read file in HDFS to RDD
+then Row to DF using toDF. 
+
+
+But we need to get data from local file system.
+
+productsRaw = open("/home/cloudera/Bd/data-master/retail_db/orders/part-00000").read().splitlines()
+productsRDD = sc.parallelize(productsRaw)
+
+without registering as temp table you cannot use sql type of syntax to perform queries. 
+
+productsDF = productsRDD.map(lambda p: Row(product_id=int(p.split(",")[0]), product_name=p.split(",")[2])).toDF()
+
+>>> productsDF.show()
+
+
+productsDF.registerTempTable("products")
+
+>>> sqlContext.sql("select * from products").show()
+
+Now products will be temp table name. Now product table need to be used if need to be queried. 
+
+Now need to join, products from local file using the above table and join orders and order_items from hive. 
+
+@Spark Write Spark Application for data processing 
+131 #SparkSQL - Write Spark SQL Application for data processing 
+
+1.products have to be read from local file system
+2.orders and order_items which are a part of db retail_db_txt which contains data in text file format. 
+
+
+sqlContext.sql("select * from products").show()
+sqlContext.sql("select * from orders").show() #product name
+sqlContext.sql("select * from order_items").show()
+
+if you want to reduce the number of tasks, say
+sqlContext.setConf("spark.sql.shuffle.partitions", "2")
+
+
+sqlContext.sql("SELECT * o.order_date, p.product_name, sum(oi.order_item_subtotal) daily_revenue_per_product FROM 
+orders o JOIN order_items oi
+ON o.order_id = oi.order_item_order_id
+JOIN products p
+ON p.product_id = oi.order_item_product_id
+WHERE o.order_status IN ('COMPLETE','CLOSED')
+GROUP BY o.order_date, p.product_name
+ORDER BY o.order_date, daily_revenue_per_product DESC").show()
+
+
+
+@Spark Write application and save to hive 
+132 #21 Spark SQL - Write Spark SQL Application - Save output to Hive.
+
+Store the output to hive database. 
+
+sqlContext.sql("CREATE DATABASE srikapardhi_daily_revenue");
+
+sqlContext.sql("CREATE TABLE srikapardhi_daily_revenue.daily_revenue(order_date string, product_name string, daily_revenue_per_product float) STORED AS orc")
+
+sqlContext.sql("select * from srikapardhi_daily_revenue.daily_revenue").show()
+
+
+if we want to write data into this table, 
+
+Spark programming guide > 
+daily_revenue_per_product_d.insertInto("srikapardhi_daily_revenue.daily_revenue");
+
+daily_revenue_per_product_d.insertInto("srikapardhi_daily_revenue.daily_revenue").show();
+
+
+@SparkSQL Data Frame Operations 
+133 #22 SparkSQL - Data Frame Operations
+1.show
+2.select
+3.filter
+4.join
+5.And more
+
+
+help(daily_revenue_per_product_df.write)
+
+daily_revenue_per_product_df.schema()
+
+
+daily_revenue_per_product_df.insertInto(srikapardhi_daily_revenue.daily_revenue")
+
+daily_revenue_per_product_df.show(100)
+daily_revenue_per_product_df.save("user/srikapardhi/daily_revenue_save", "json")
+
+daily_revenue_per_product_df.write.json("user/srikapardhi/daily_revenue_save")
+
+
+
+daily_revenue_per_product_df.select("order_date", "daily_revenue_per_product").show()
+
+daily_revenue_per_product_df.filter(daily_revenue_per_product_df["order_date"] == "2013-07-26 00:00:00.0").show()
+
+
+
 
 
 
